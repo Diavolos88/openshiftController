@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="'OpenShift Controller - ' + ${namespace}">Управление Deployments</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 15px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .alert {
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border-left: 4px solid #48bb78;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border-left: 4px solid #f56565;
+        }
+
+        .alert-warning {
+            background: #feebc8;
+            color: #7c2d12;
+            border-left: 4px solid #ed8936;
+        }
+
+        .actions-bar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-danger {
+            background: #fc8181;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #f56565;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(245, 101, 101, 0.3);
+        }
+
+        .btn-warning {
+            background: #f6ad55;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #ed8936;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .deployments-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .deployments-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .deployment-row {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+
+        .deployment-row:hover {
+            background: #edf2f7;
+            border-color: #667eea;
+            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.1);
+        }
+
+        .deployment-name {
+            font-weight: 600;
+            color: #2d3748;
+            min-width: 180px;
+            flex-shrink: 0;
+        }
+
+        .deployment-current {
+            color: #2d3748;
+            font-weight: 600;
+            min-width: 80px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .deployment-original {
+            color: #4a5568;
+            min-width: 100px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .deployment-ready {
+            color: #4a5568;
+            min-width: 80px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .scale-form {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .scale-input {
+            padding: 6px 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 60px;
+            text-align: center;
+        }
+
+        .scale-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-save {
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-save:hover {
+            background: #5568d3;
+        }
+
+        .deployment-header-row {
+            background: #edf2f7;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #4a5568;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .deployment-header-name {
+            min-width: 180px;
+            flex-shrink: 0;
+        }
+
+        .deployment-header-current {
+            min-width: 80px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .deployment-header-original {
+            min-width: 100px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .deployment-header-ready {
+            min-width: 80px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .deployment-header-scale {
+            min-width: 150px;
+            flex-shrink: 0;
+        }
+
+        .deployment-header-actions {
+            min-width: 350px;
+            flex-shrink: 0;
+            text-align: center;
+        }
+
+        .deployment-actions {
+            display: flex;
+            gap: 6px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .btn-pod-action {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-pod-restart {
+            background: #f6ad55;
+            color: white;
+        }
+
+        .btn-pod-restart:hover {
+            background: #ed8936;
+        }
+
+        .btn-pod-delete {
+            background: #fc8181;
+            color: white;
+        }
+
+        .btn-pod-delete:hover {
+            background: #f56565;
+        }
+
+        .btn-pod-restore {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-pod-restore:hover {
+            background: #38a169;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .empty-state h3 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #4a5568;
+        }
+
+        form {
+            display: inline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/" class="back-link">← Назад к проектам</a>
+            <h1>🚀 <span th:text="${namespace}">namespace</span></h1>
+        </div>
+
+        <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+        <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+
+        <div class="actions-bar">
+            <form th:action="@{'/deployments/' + ${namespace} + '/shutdown-all'}" method="post"
+                  onsubmit="return confirm('Остановить все сервисы (установить все в 0)? Это действие нельзя отменить!')">
+                <button type="submit" class="btn btn-danger">🛑 Потушить все</button>
+            </form>
+            <form th:action="@{'/deployments/' + ${namespace} + '/restart-all'}" method="post"
+                  onsubmit="return confirm('Перезапустить все сервисы?')">
+                <button type="submit" class="btn btn-warning">🔄 Рестартнуть все</button>
+            </form>
+            <form th:action="@{'/deployments/' + ${namespace} + '/restore'}" method="post"
+                  onsubmit="return confirm('Восстановить стартовое значение для всех сервисов?')">
+                <button type="submit" class="btn btn-success">↩️ Восстановить</button>
+            </form>
+            <form th:action="@{'/deployments/' + ${namespace} + '/update-original-state'}" method="post"
+                  onsubmit="return confirm('Обновить стартовые значения? Текущие значения всех Deployments будут сохранены как стартовые.')">
+                <button type="submit" class="btn btn-primary">💾 Обновить стартовые значения</button>
+            </form>
+        </div>
+
+        <div class="deployments-container">
+            <div th:if="${deployments != null and !deployments.isEmpty()}">
+                <div class="deployment-header-row">
+                    <div class="deployment-header-name">Имя</div>
+                    <div class="deployment-header-current">Текущие</div>
+                    <div class="deployment-header-original">Стартовое</div>
+                    <div class="deployment-header-ready">Готовые</div>
+                    <div class="deployment-header-scale">Изменить</div>
+                    <div class="deployment-header-actions" style="min-width: 350px;">Действия</div>
+                </div>
+                <div class="deployments-list">
+                <div th:each="deployment : ${deployments}" class="deployment-row">
+                    <div class="deployment-name" th:text="${deployment.name}">Deployment Name</div>
+                    <div class="deployment-current" th:text="${deployment.currentReplicas}">0</div>
+                    <div class="deployment-original" th:text="${deployment.originalReplicas ?: deployment.currentReplicas}">0</div>
+                    <div class="deployment-ready" th:if="${deployment.readyReplicas != null}" th:text="${deployment.readyReplicas}">0</div>
+                    <div class="deployment-ready" th:if="${deployment.readyReplicas == null}" style="color: #cbd5e0;">—</div>
+                    <div class="scale-form">
+                        <form th:action="@{'/deployments/' + ${deployment.namespace} + '/' + ${deployment.name} + '/scale'}" method="post">
+                            <input type="number" 
+                                   name="replicas" 
+                                   th:value="${deployment.currentReplicas}"
+                                   min="0" 
+                                   max="100"
+                                   class="scale-input"
+                                   required>
+                            <button type="submit" class="btn-save">Сохранить</button>
+                        </form>
+                    </div>
+                    <div class="deployment-actions">
+                        <form th:action="@{'/deployments/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/delete'}" method="post"
+                              onsubmit="return confirm('Остановить ' + '${deployment.name}' + ' (установить реплики в 0)?')">
+                            <button type="submit" class="btn-pod-action btn-pod-delete" title="Остановить (реплики в 0)">🗑️</button>
+                        </form>
+                        <form th:action="@{'/deployments/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/restart'}" method="post"
+                              onsubmit="return confirm('Перезапустить все поды для ' + '${deployment.name}' + '?')">
+                            <button type="submit" class="btn-pod-action btn-pod-restart" title="Рестарт всех под">🔄</button>
+                        </form>
+                        <form th:action="@{'/deployments/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/restore'}" method="post"
+                              onsubmit="return confirm('Восстановить поды для ' + '${deployment.name}' + '?')">
+                            <button type="submit" class="btn-pod-action btn-pod-restore" title="Восстановить поды">↩️</button>
+                        </form>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <div th:if="${deployments == null or deployments.isEmpty()}" class="empty-state">
+                <h3>Deployments не найдены</h3>
+                <p>В проекте <strong th:text="${namespace}">namespace</strong> нет Deployments</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

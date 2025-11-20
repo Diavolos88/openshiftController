@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="'Под: ' + ${pod.name}">Детали пода</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .details-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .details-card h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .detail-row {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            gap: 20px;
+            padding: 15px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-size: 14px;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .detail-value {
+            font-size: 14px;
+            color: #2d3748;
+            word-break: break-word;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-running {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-pending {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+
+        .status-failed {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .actions {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-warning {
+            background: #f6ad55;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #ed8936;
+        }
+
+        .btn-danger {
+            background: #fc8181;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #f56565;
+        }
+
+        form {
+            display: inline;
+        }
+
+        .json-view {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #2d3748;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a th:href="@{'/?namespace=' + ${pod.namespace}}" class="back-link">← Назад к списку</a>
+            <h1 th:text="${pod.name}">pod-name</h1>
+        </div>
+
+        <div class="details-card" th:if="${pod}">
+            <h2>Основная информация</h2>
+            
+            <div class="detail-row">
+                <div class="detail-label">Имя</div>
+                <div class="detail-value" th:text="${pod.name}">pod-name</div>
+            </div>
+            
+            <div class="detail-row">
+                <div class="detail-label">Namespace</div>
+                <div class="detail-value" th:text="${pod.namespace}">default</div>
+            </div>
+            
+            <div class="detail-row">
+                <div class="detail-label">Статус</div>
+                <div class="detail-value">
+                    <span class="status-badge" 
+                          th:classappend="${pod.status == 'Running'} ? 'status-running' : 
+                                         (${pod.status == 'Pending'} ? 'status-pending' : 
+                                         (${pod.status == 'Failed' or pod.status == 'Error'} ? 'status-failed' : 'status-succeeded'))"
+                          th:text="${pod.status}">Running</span>
+                </div>
+            </div>
+            
+            <div class="detail-row" th:if="${pod.nodeName}">
+                <div class="detail-label">Node</div>
+                <div class="detail-value" th:text="${pod.nodeName}">node-1</div>
+            </div>
+            
+            <div class="detail-row" th:if="${pod.creationTimestamp != null}">
+                <div class="detail-label">Создан</div>
+                <div class="detail-value" th:text="${#temporals.format(pod.creationTimestamp, 'dd.MM.yyyy HH:mm:ss')}">19.11.2025 21:00:00</div>
+            </div>
+        </div>
+
+        <div class="details-card" th:if="${pod.labels != null and !pod.labels.isEmpty()}">
+            <h2>Labels</h2>
+            <div class="json-view">
+                <div th:each="entry : ${pod.labels}" style="margin-bottom: 5px;">
+                    <strong th:text="${entry.key}">key</strong>: <span th:text="${entry.value}">value</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="details-card" th:if="${pod.annotations != null and !pod.annotations.isEmpty()}">
+            <h2>Annotations</h2>
+            <div class="json-view">
+                <div th:each="entry : ${pod.annotations}" style="margin-bottom: 5px;">
+                    <strong th:text="${entry.key}">key</strong>: <span th:text="${entry.value}">value</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a th:href="@{'/?namespace=' + ${pod.namespace}}" class="btn btn-primary">Назад</a>
+            <form th:action="@{'/pod/' + ${pod.namespace} + '/' + ${pod.name} + '/restart'}" method="post">
+                <button type="submit" class="btn btn-warning" 
+                        onclick="return confirm('Перезапустить под?')">
+                    🔄 Перезапустить
+                </button>
+            </form>
+            <form th:action="@{'/pod/' + ${pod.namespace} + '/' + ${pod.name} + '/delete'}" method="post">
+                <button type="submit" class="btn btn-danger"
+                        onclick="return confirm('Удалить под? Это действие нельзя отменить!')">
+                    🗑️ Удалить
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenShift Controller - Проекты</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 36px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 18px;
+        }
+
+        .namespaces-list {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .namespaces-list h2 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 25px;
+        }
+
+        .namespace-item {
+            display: block;
+            padding: 20px;
+            margin-bottom: 15px;
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            text-decoration: none;
+            color: #2d3748;
+            font-size: 18px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .namespace-item:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        .namespace-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .empty-state h3 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #4a5568;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 OpenShift Controller</h1>
+            <p>Выберите проект (namespace)</p>
+        </div>
+
+        <div class="namespaces-list">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h2 style="margin: 0;">Проекты</h2>
+                <a href="/connection/setup" style="padding: 8px 16px; background: #e2e8f0; color: #2d3748; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.2s;">
+                    ⚙️ Настройки подключения
+                </a>
+            </div>
+            
+            <div th:if="${namespaces != null and !namespaces.isEmpty()}">
+                <a th:each="ns : ${namespaces}" 
+                   th:href="@{'/deployments/' + ${ns}}"
+                   class="namespace-item">
+                    📁 <span th:text="${ns}">namespace</span>
+                </a>
+            </div>
+
+            <div th:if="${namespaces == null or namespaces.isEmpty()}" class="empty-state">
+                <h3>Проекты не найдены</h3>
+                <p>Не удалось получить список проектов</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
