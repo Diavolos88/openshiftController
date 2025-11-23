@@ -13,12 +13,13 @@ import java.util.Optional;
 public interface OpenShiftConnectionRepository extends JpaRepository<OpenShiftConnection, Long> {
 
     /**
-     * Найти активное подключение
+     * Найти первое активное подключение (для обратной совместимости)
+     * Теперь может быть несколько активных подключений одновременно
      */
-    Optional<OpenShiftConnection> findByActiveTrue();
+    Optional<OpenShiftConnection> findFirstByActiveTrueOrderByIdAsc();
 
     /**
-     * Проверить, существует ли активное подключение
+     * Проверить, существует ли хотя бы одно активное подключение
      */
     boolean existsByActiveTrue();
 }

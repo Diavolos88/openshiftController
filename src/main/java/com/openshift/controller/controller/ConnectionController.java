@@ -1,7 +1,9 @@
 package com.openshift.controller.controller;
 
+import com.openshift.controller.entity.ConnectionGroup;
 import com.openshift.controller.entity.OpenShiftConnection;
 import com.openshift.controller.service.ConnectionService;
+import com.openshift.controller.service.ConnectionGroupService;
 import com.openshift.controller.service.OpenShiftClientService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class ConnectionController {
 
     private final ConnectionService connectionService;
+    private final ConnectionGroupService connectionGroupService;
     private final OpenShiftClientService openShiftClientService;
 
     /**
@@ -32,6 +35,10 @@ public class ConnectionController {
         // Получаем все подключения
         var allConnections = connectionService.getAllConnections();
         model.addAttribute("connections", allConnections);
+        
+        // Получаем все группы для выбора
+        var allGroups = connectionGroupService.getAllGroups();
+        model.addAttribute("groups", allGroups);
         
         // Проверяем, есть ли активное подключение
         boolean hasActiveConnection = connectionService.hasActiveConnection();
@@ -60,9 +67,12 @@ public class ConnectionController {
     public String saveConnection(
             @RequestParam String masterUrl,
             @RequestParam String token,
-            @RequestParam(required = false) String defaultNamespace,
+            @RequestParam String namespace,
             @RequestParam(required = false) String name,
+            @RequestParam(required = false) String groupId,
+            @RequestParam(required = false) String newGroupName,
             @RequestParam(required = false, defaultValue = "false") boolean makeActive,
+            @RequestParam(required = false, defaultValue = "false") boolean isMock,
             RedirectAttributes redirectAttributes) {
         
         try {
@@ -72,10 +82,28 @@ public class ConnectionController {
             OpenShiftConnection connection = OpenShiftConnection.builder()
                     .masterUrl(masterUrl.trim())
                     .token(token.trim())
-                    .defaultNamespace(defaultNamespace != null ? defaultNamespace.trim() : null)
+                    .namespace(namespace != null ? namespace.trim() : "default")
                     .name(name != null && !name.trim().isEmpty() ? name.trim() : "Подключение " + System.currentTimeMillis())
                     .active(shouldBeActive)
+                    .isMock(isMock)
                     .build();
+            
+            // Устанавливаем группу: либо выбираем существующую, либо создаем новую
+            if (groupId != null && !groupId.isEmpty() && !groupId.equals("__NEW__")) {
+                try {
+                    Long groupIdLong = Long.parseLong(groupId);
+                    connectionGroupService.getGroupById(groupIdLong).ifPresent(connection::setGroup);
+                } catch (NumberFormatException e) {
+                    log.warn("Некорректный ID группы: {}", groupId);
+                }
+            }
+            
+            // Если указано название новой группы, создаем её
+            if (newGroupName != null && !newGroupName.trim().isEmpty()) {
+                ConnectionGroup newGroup = connectionGroupService.createGroup(newGroupName.trim(), null);
+                connection.setGroup(newGroup);
+                log.info("Создана новая группа '{}' для подключения", newGroupName.trim());
+            }
             
             connectionService.saveConnection(connection);
             
@@ -83,25 +111,71 @@ public class ConnectionController {
             if (shouldBeActive) {
                 openShiftClientService.resetCache();
                 
-                // Проверяем подключение
-                try {
-                    openShiftClientService.getClient();
+                // Для mock-подключений не проверяем реальное соединение
+                if (isMock) {
                     redirectAttributes.addFlashAttribute("success", 
-                        "Подключение успешно сохранено, активировано и проверено!");
-                } catch (Exception e) {
-                    log.warn("Не удалось проверить подключение", e);
-                    redirectAttributes.addFlashAttribute("warning", 
-                        "Подключение сохранено и активировано, но не удалось проверить соединение: " + e.getMessage());
+                        "Mock-подключение успешно сохранено и активировано! Используются тестовые данные.");
+                } else {
+                    // Проверяем подключение
+                    try {
+                        openShiftClientService.getClient();
+                        redirectAttributes.addFlashAttribute("success", 
+                            "Подключение успешно сохранено, активировано и проверено!");
+                    } catch (Exception e) {
+                        log.warn("Не удалось проверить подключение", e);
+                        redirectAttributes.addFlashAttribute("warning", 
+                            "Подключение сохранено и активировано, но не удалось проверить соединение: " + e.getMessage());
+                    }
                 }
             } else {
-                redirectAttributes.addFlashAttribute("success", 
-                    "Подключение успешно сохранено! Для использования активируйте его.");
+                String message = isMock 
+                    ? "Mock-подключение успешно сохранено! Для использования активируйте его."
+                    : "Подключение успешно сохранено! Для использования активируйте его.";
+                redirectAttributes.addFlashAttribute("success", message);
             }
             
         } catch (Exception e) {
             log.error("Ошибка при сохранении подключения", e);
             redirectAttributes.addFlashAttribute("error", 
                 "Ошибка при сохранении подключения: " + e.getMessage());
+        }
+        
+        return "redirect:/connection/setup";
+    }
+
+    /**
+     * Создать тестовое mock-подключение
+     */
+    @PostMapping("/create-mock")
+    public String createMockConnection(RedirectAttributes redirectAttributes) {
+        try {
+            // Если нет активных подключений, новое становится активным
+            boolean shouldBeActive = !connectionService.hasActiveConnection();
+            
+            OpenShiftConnection mockConnection = OpenShiftConnection.builder()
+                    .masterUrl("mock://test-cluster")
+                    .token("mock-token-for-testing")
+                    .namespace("test-project")
+                    .name("Тестовый кластер (Mock)")
+                    .active(shouldBeActive)
+                    .isMock(true)
+                    .build();
+            
+            connectionService.saveConnection(mockConnection);
+            
+            if (shouldBeActive) {
+                openShiftClientService.resetCache();
+                redirectAttributes.addFlashAttribute("success", 
+                    "Тестовое mock-подключение успешно создано и активировано! Используются тестовые данные.");
+            } else {
+                redirectAttributes.addFlashAttribute("success", 
+                    "Тестовое mock-подключение успешно создано! Для использования активируйте его.");
+            }
+            
+        } catch (Exception e) {
+            log.error("Ошибка при создании mock-подключения", e);
+            redirectAttributes.addFlashAttribute("error", 
+                "Ошибка при создании mock-подключения: " + e.getMessage());
         }
         
         return "redirect:/connection/setup";
@@ -115,18 +189,44 @@ public class ConnectionController {
             @RequestParam Long id,
             @RequestParam String masterUrl,
             @RequestParam String token,
-            @RequestParam(required = false) String defaultNamespace,
+            @RequestParam String namespace,
             @RequestParam(required = false) String name,
+            @RequestParam(required = false) String groupId,
+            @RequestParam(required = false) String newGroupName,
+            @RequestParam(required = false, defaultValue = "false") boolean isMock,
             RedirectAttributes redirectAttributes) {
         
         try {
             OpenShiftConnection updated = OpenShiftConnection.builder()
                     .masterUrl(masterUrl.trim())
                     .token(token.trim())
-                    .defaultNamespace(defaultNamespace != null ? defaultNamespace.trim() : null)
+                    .namespace(namespace != null ? namespace.trim() : "default")
                     .name(name != null && !name.trim().isEmpty() ? name.trim() : "Основное подключение")
                     .active(true)
+                    .isMock(isMock)
                     .build();
+            
+            // Устанавливаем группу: либо выбираем существующую, либо создаем новую, либо удаляем связь
+            if (groupId != null && !groupId.isEmpty() && !groupId.equals("__NEW__")) {
+                // Выбираем существующую группу
+                try {
+                    Long groupIdLong = Long.parseLong(groupId);
+                    connectionGroupService.getGroupById(groupIdLong).ifPresent(updated::setGroup);
+                } catch (NumberFormatException e) {
+                    log.warn("Некорректный ID группы: {}", groupId);
+                    updated.setGroup(null);
+                }
+            } else {
+                // Если groupId не указан или равен "__NEW__" без названия, убираем связь с группой
+                updated.setGroup(null);
+            }
+            
+            // Если указано название новой группы, создаем её (приоритет над выбором существующей)
+            if (newGroupName != null && !newGroupName.trim().isEmpty()) {
+                ConnectionGroup newGroup = connectionGroupService.createGroup(newGroupName.trim(), null);
+                updated.setGroup(newGroup);
+                log.info("Создана новая группа '{}' для подключения", newGroupName.trim());
+            }
             
             connectionService.updateConnection(id, updated);
             
@@ -136,13 +236,16 @@ public class ConnectionController {
             redirectAttributes.addFlashAttribute("success", 
                 "Подключение успешно обновлено!");
             
-            // Проверяем подключение
-            try {
-                openShiftClientService.getClient();
-            } catch (Exception e) {
-                log.warn("Не удалось проверить подключение", e);
-                redirectAttributes.addFlashAttribute("warning", 
-                    "Подключение обновлено, но не удалось проверить соединение: " + e.getMessage());
+            // Для mock-подключений не проверяем реальное соединение
+            if (!isMock) {
+                // Проверяем подключение
+                try {
+                    openShiftClientService.getClient();
+                } catch (Exception e) {
+                    log.warn("Не удалось проверить подключение", e);
+                    redirectAttributes.addFlashAttribute("warning", 
+                        "Подключение обновлено, но не удалось проверить соединение: " + e.getMessage());
+                }
             }
             
         } catch (Exception e) {

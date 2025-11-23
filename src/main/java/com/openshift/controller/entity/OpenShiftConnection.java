@@ -36,10 +36,18 @@ public class OpenShiftConnection {
     private String token;
 
     /**
-     * Namespace по умолчанию
+     * Namespace (проект) для этого подключения
+     * Одно подключение = один namespace
      */
-    @Column(length = 100)
-    private String defaultNamespace;
+    @Column(nullable = false, length = 100)
+    private String namespace;
+
+    /**
+     * Группа, к которой принадлежит это подключение
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id")
+    private ConnectionGroup group;
 
     /**
      * Название подключения (для удобства пользователя)
@@ -48,11 +56,19 @@ public class OpenShiftConnection {
     private String name;
 
     /**
-     * Активно ли это подключение (может быть только одно активное)
+     * Активно ли это подключение (используется для отображения в UI)
+     * Теперь может быть несколько активных подключений одновременно
      */
     @Column(nullable = false)
     @Builder.Default
     private Boolean active = true;
+
+    /**
+     * Является ли это подключение mock-заглушкой (для тестирования)
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean isMock = false;
 
     /**
      * Дата создания

@@ -96,7 +96,7 @@ public class WebController {
             redirectAttributes.addFlashAttribute("error", 
                 "Ошибка при перезапуске: " + e.getMessage());
         }
-        return "redirect:/?namespace=" + namespace;
+        return "redirect:/pods?namespace=" + namespace;
     }
 
     /**
@@ -121,7 +121,7 @@ public class WebController {
             redirectAttributes.addFlashAttribute("error", 
                 "Ошибка при удалении: " + e.getMessage());
         }
-        return "redirect:/?namespace=" + namespace;
+        return "redirect:/pods?namespace=" + namespace;
     }
 
     /**
@@ -145,6 +145,70 @@ public class WebController {
             model.addAttribute("pods", List.of());
             return "index";
         }
+    }
+
+    /**
+     * Массовое удаление выбранных подов
+     */
+    @PostMapping("/pods/batch/delete")
+    public String deleteSelectedPods(
+            @RequestParam String namespace,
+            @RequestParam(required = false) List<String> podNames,
+            RedirectAttributes redirectAttributes) {
+        try {
+            if (podNames == null || podNames.isEmpty()) {
+                redirectAttributes.addFlashAttribute("error", "Не выбраны поды для удаления");
+                return "redirect:/pods?namespace=" + namespace;
+            }
+            
+            java.util.Map<String, Boolean> results = podService.deletePods(namespace, podNames);
+            long successCount = results.values().stream().filter(b -> b).count();
+            
+            if (successCount == podNames.size()) {
+                redirectAttributes.addFlashAttribute("success", 
+                    "Успешно удалено " + successCount + " из " + podNames.size() + " подов");
+            } else {
+                redirectAttributes.addFlashAttribute("warning", 
+                    "Удалено " + successCount + " из " + podNames.size() + " подов");
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при массовом удалении подов", e);
+            redirectAttributes.addFlashAttribute("error", 
+                "Ошибка при удалении: " + e.getMessage());
+        }
+        return "redirect:/pods?namespace=" + namespace;
+    }
+
+    /**
+     * Массовый перезапуск выбранных подов
+     */
+    @PostMapping("/pods/batch/restart")
+    public String restartSelectedPods(
+            @RequestParam String namespace,
+            @RequestParam(required = false) List<String> podNames,
+            RedirectAttributes redirectAttributes) {
+        try {
+            if (podNames == null || podNames.isEmpty()) {
+                redirectAttributes.addFlashAttribute("error", "Не выбраны поды для перезапуска");
+                return "redirect:/pods?namespace=" + namespace;
+            }
+            
+            java.util.Map<String, Boolean> results = podService.restartPods(namespace, podNames);
+            long successCount = results.values().stream().filter(b -> b).count();
+            
+            if (successCount == podNames.size()) {
+                redirectAttributes.addFlashAttribute("success", 
+                    "Успешно перезапущено " + successCount + " из " + podNames.size() + " подов");
+            } else {
+                redirectAttributes.addFlashAttribute("warning", 
+                    "Перезапущено " + successCount + " из " + podNames.size() + " подов");
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при массовом перезапуске подов", e);
+            redirectAttributes.addFlashAttribute("error", 
+                "Ошибка при перезапуске: " + e.getMessage());
+        }
+        return "redirect:/pods?namespace=" + namespace;
     }
 }
 

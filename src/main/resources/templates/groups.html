@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление группами подключений</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 24px;
+            color: #333;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 4px;
+            padding: 26px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            text-align: left;
+        }
+
+        .header h1 {
+            font-size: 26px;
+            font-weight: 500;
+            color: #333;
+            margin: 0 0 8px 0;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .actions-bar {
+            background: white;
+            border-radius: 4px;
+            padding: 18px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 9px 18px;
+            border: none;
+            border-radius: 3px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            color: white;
+        }
+
+        .btn:hover {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #fb8c00;
+        }
+
+        .btn-secondary {
+            background: #607d8b;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #546e7a;
+        }
+
+        .groups-list {
+            background: white;
+            border-radius: 4px;
+            padding: 22px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .groups-list h2 {
+            font-size: 19px;
+            font-weight: 500;
+            color: #333;
+            margin: 0 0 18px 0;
+            padding-bottom: 14px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .alert {
+            padding: 14px 18px;
+            margin-bottom: 18px;
+            font-size: 14px;
+            border: 1px solid;
+            border-radius: 4px;
+        }
+
+        .alert-success {
+            background: #f0f9f0;
+            color: #2d5016;
+            border-color: #4caf50;
+        }
+
+        .alert-error {
+            background: #fff5f5;
+            color: #8b2635;
+            border-color: #f44336;
+        }
+
+        .group-item {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-left: 3px solid #667eea;
+            border-radius: 3px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s;
+        }
+
+        .group-item:hover {
+            border-color: #ccc;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .group-name {
+            font-size: 17px;
+            font-weight: 500;
+            color: #333;
+            margin: 0 0 8px 0;
+        }
+
+        .group-description {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 12px;
+        }
+
+        .group-info {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+
+        .group-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .btn-edit {
+            background: #607d8b;
+            color: white;
+            padding: 6px 14px;
+            border: none;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s;
+        }
+
+        .btn-edit:hover {
+            background: #546e7a;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-delete {
+            background: #f44336;
+            color: white;
+            padding: 6px 14px;
+            border: none;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-delete:hover {
+            background: #e53935;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-view {
+            background: #2196f3;
+            color: white;
+            padding: 6px 14px;
+            border: none;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s;
+        }
+
+        .btn-view:hover {
+            background: #1e88e5;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #718096;
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #4a5568;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📁 Управление группами подключений</h1>
+            <p>Создавайте и управляйте группами для объединения подключений</p>
+        </div>
+
+        <div class="actions-bar">
+            <a href="/groups/create" class="btn btn-primary">➕ Создать новую группу</a>
+            <a href="/" class="btn btn-secondary">На главную</a>
+        </div>
+
+        <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+        <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+
+        <div class="groups-list">
+            <h2>Существующие группы</h2>
+            
+            <div th:if="${groups != null and !groups.isEmpty()}">
+                <div th:each="group : ${groups}" class="group-item">
+                    <div class="group-header">
+                        <div style="flex: 1;">
+                            <h3 class="group-name" th:text="${group.name}">Название группы</h3>
+                            <div class="group-description" th:if="${group.description != null and !group.description.isEmpty()}" 
+                                 th:text="${group.description}">Описание группы</div>
+                            <div class="group-info">
+                                Подключений в группе: <strong th:text="${group.connections != null ? group.connections.size() : 0}">0</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="group-actions">
+                        <a th:href="@{'/groups/' + ${group.id}}" class="btn-view">Открыть группу</a>
+                        <a th:href="@{'/groups/edit/' + ${group.id}}" class="btn-edit">Редактировать</a>
+                        <form th:action="@{'/groups/delete/' + ${group.id}}" method="post" style="display: inline;"
+>
+                            <button type="submit" class="btn-delete">Удалить</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div th:if="${groups == null or groups.isEmpty()}" class="empty-state">
+                <h3>Нет групп</h3>
+                <p>Создайте первую группу для объединения подключений</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

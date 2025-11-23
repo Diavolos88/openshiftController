@@ -21,10 +21,11 @@ public class ConnectionService {
     private final OpenShiftConnectionRepository repository;
 
     /**
-     * Получить активное подключение
+     * Получить первое активное подключение (для обратной совместимости)
+     * Теперь может быть несколько активных подключений одновременно
      */
     public Optional<OpenShiftConnection> getActiveConnection() {
-        return repository.findByActiveTrue();
+        return repository.findFirstByActiveTrueOrderByIdAsc();
     }
 
     /**
@@ -36,13 +37,12 @@ public class ConnectionService {
 
     /**
      * Сохранить новое подключение
-     * Если это первое подключение или указано active=true, оно станет активным
+     * Все подключения теперь активны одновременно, поле active используется только для отображения в UI
      */
     @Transactional
     public OpenShiftConnection saveConnection(OpenShiftConnection connection) {
-        // Если это подключение должно быть активным, деактивируем все остальные
-        if (connection.getActive() == null || connection.getActive()) {
-            deactivateAllConnections();
+        // Все подключения по умолчанию активны (не деактивируем другие)
+        if (connection.getActive() == null) {
             connection.setActive(true);
         }
         
@@ -61,15 +61,14 @@ public class ConnectionService {
         
         existing.setMasterUrl(updatedConnection.getMasterUrl());
         existing.setToken(updatedConnection.getToken());
-        existing.setDefaultNamespace(updatedConnection.getDefaultNamespace());
+        existing.setNamespace(updatedConnection.getNamespace());
         existing.setName(updatedConnection.getName());
+        existing.setIsMock(updatedConnection.getIsMock() != null ? updatedConnection.getIsMock() : false);
+        existing.setGroup(updatedConnection.getGroup());
         
-        // Если это подключение должно быть активным, деактивируем все остальные
-        if (updatedConnection.getActive() != null && updatedConnection.getActive()) {
-            deactivateAllConnections();
-            existing.setActive(true);
-        } else if (updatedConnection.getActive() != null && !updatedConnection.getActive()) {
-            existing.setActive(false);
+        // Поле active используется только для отображения в UI, не влияет на работу подключения
+        if (updatedConnection.getActive() != null) {
+            existing.setActive(updatedConnection.getActive());
         }
         
         OpenShiftConnection saved = repository.save(existing);
@@ -78,11 +77,10 @@ public class ConnectionService {
     }
 
     /**
-     * Активировать подключение (деактивирует все остальные)
+     * Активировать/деактивировать подключение (только для UI, не влияет на работу)
      */
     @Transactional
     public void activateConnection(Long id) {
-        deactivateAllConnections();
         OpenShiftConnection connection = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Подключение с ID " + id + " не найдено"));
         connection.setActive(true);
@@ -113,12 +111,29 @@ public class ConnectionService {
     }
 
     /**
+     * Получить подключение по ID
+     */
+    public Optional<OpenShiftConnection> getConnectionById(Long id) {
+        return repository.findById(id);
+    }
+
+    /**
      * Удалить подключение
      */
     @Transactional
     public void deleteConnection(Long id) {
         repository.deleteById(id);
         log.info("Удалено подключение с ID: {}", id);
+    }
+
+    /**
+     * Сохранить список подключений (для обновления связей с группами)
+     */
+    @Transactional
+    public List<OpenShiftConnection> saveAll(List<OpenShiftConnection> connections) {
+        List<OpenShiftConnection> saved = repository.saveAll(connections);
+        log.info("Сохранено {} подключений", saved.size());
+        return saved;
     }
 }
 

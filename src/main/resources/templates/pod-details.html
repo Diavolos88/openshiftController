@@ -250,13 +250,13 @@
             <a th:href="@{'/?namespace=' + ${pod.namespace}}" class="btn btn-primary">Назад</a>
             <form th:action="@{'/pod/' + ${pod.namespace} + '/' + ${pod.name} + '/restart'}" method="post">
                 <button type="submit" class="btn btn-warning" 
-                        onclick="return confirm('Перезапустить под?')">
+>
                     🔄 Перезапустить
                 </button>
             </form>
             <form th:action="@{'/pod/' + ${pod.namespace} + '/' + ${pod.name} + '/delete'}" method="post">
                 <button type="submit" class="btn btn-danger"
-                        onclick="return confirm('Удалить под? Это действие нельзя отменить!')">
+>
                     🗑️ Удалить
                 </button>
             </form>

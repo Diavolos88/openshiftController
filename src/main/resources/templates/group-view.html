@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="'OpenShift Controller - Группа ' + ${group.name}">Просмотр группы</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 24px;
+            color: #333;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 26px;
+            font-weight: 500;
+            color: #333;
+            margin: 0 0 10px 0;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 15px;
+            color: #0066cc;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .alert {
+            padding: 14px 18px;
+            margin-bottom: 18px;
+            font-size: 14px;
+            border: 1px solid;
+            border-radius: 4px;
+        }
+
+        .alert-success {
+            background: #f0f9f0;
+            color: #2d5016;
+            border-color: #4caf50;
+        }
+
+        .alert-error {
+            background: #fff5f5;
+            color: #8b2635;
+            border-color: #f44336;
+        }
+
+        .actions-bar {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 18px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 9px 18px;
+            border: none;
+            border-radius: 3px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            color: white;
+        }
+
+        .btn:hover {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53935;
+        }
+
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #fb8c00;
+        }
+
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #43a047;
+        }
+
+        .btn-primary {
+            background: #2196f3;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1e88e5;
+        }
+
+        .group-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            padding-bottom: 20px;
+        }
+
+        /* Для 1-2 подключений - удобное расположение */
+        .group-container:has(.connection-column:only-child) {
+            grid-template-columns: 1fr;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .group-container:has(.connection-column:nth-child(2):last-child) {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .connection-column {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 18px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            min-height: 300px;
+        }
+
+        .connection-column:nth-child(1) {
+            border-left: 3px solid #2196f3;
+        }
+
+        .connection-column:nth-child(2) {
+            border-left: 3px solid #4caf50;
+        }
+
+        .connection-header {
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 14px;
+            margin-bottom: 16px;
+            padding: 14px;
+            margin: -18px -18px 16px -18px;
+            background: #f8f9fa;
+        }
+
+        .connection-header h2 {
+            font-size: 17px;
+            font-weight: 500;
+            color: #333;
+            margin: 0 0 8px 0;
+        }
+
+        .connection-info {
+            font-size: 13px;
+            color: #666;
+            margin-top: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .connection-info div {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .deployments-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .deployment-row {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-top: none;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 14px;
+            margin: 0;
+            transition: background 0.15s;
+        }
+
+        .deployment-row:first-child {
+            border-top: 1px solid #e0e0e0;
+            border-radius: 2px 2px 0 0;
+        }
+
+        .deployment-row:last-child {
+            border-radius: 0 0 2px 2px;
+        }
+
+        .deployment-row:hover {
+            background: #f8f8f8;
+            border-color: #ccc;
+        }
+
+        .deployment-name {
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+            min-width: 160px;
+            flex-shrink: 0;
+        }
+
+        .deployment-info {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            font-size: 13px;
+            color: #666;
+            flex-shrink: 0;
+        }
+
+        .deployment-info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .deployment-info-label {
+            font-size: 12px;
+            color: #888;
+            font-weight: 500;
+        }
+
+        .deployment-info-value {
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .scale-form {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .scale-input-small {
+            padding: 5px 9px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 13px;
+            width: 52px;
+            text-align: center;
+        }
+
+        .scale-input-small:focus {
+            outline: none;
+            border-color: #1976d2;
+            box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+        }
+
+        .btn-save {
+            background: #2196f3;
+            border: none;
+            color: white;
+            padding: 5px 14px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .btn-save:hover {
+            background: #1e88e5;
+            box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
+        }
+
+        .deployment-actions {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .btn-action {
+            padding: 5px 11px;
+            border: none;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            color: white;
+            transition: all 0.2s;
+        }
+
+        .btn-action:hover {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-restart {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-restart:hover {
+            background: #fb8c00;
+        }
+
+        .btn-delete {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #e53935;
+        }
+
+        .btn-restore {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-restore:hover {
+            background: #43a047;
+        }
+
+        .deployment-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            flex-shrink: 0;
+            min-width: 18px;
+        }
+
+        .batch-actions {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .batch-actions.hidden {
+            display: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #718096;
+        }
+
+        .error-state {
+            padding: 15px;
+            background: #fed7d7;
+            color: #742a2a;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+
+        form {
+            display: inline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/" class="back-link">← Назад к группам</a>
+            <h1><span th:text="${group.name}">Название группы</span></h1>
+            <div th:if="${group.description != null and !group.description.isEmpty()}" 
+                 style="font-size: 13px; color: #666; margin-top: 8px;">
+                <span th:text="${group.description}">Описание группы</span>
+            </div>
+        </div>
+
+        <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+        <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+
+        <!-- Массовые операции для всей группы -->
+        <div class="actions-bar">
+            <form th:action="@{'/groups/' + ${group.id} + '/shutdown-all'}" method="post">
+                <button type="submit" class="btn btn-danger">🛑 Потушить все</button>
+            </form>
+            <form th:action="@{'/groups/' + ${group.id} + '/restart-all'}" method="post">
+                <button type="submit" class="btn btn-warning">🔄 Рестартнуть все</button>
+            </form>
+            <form th:action="@{'/groups/' + ${group.id} + '/restore'}" method="post">
+                <button type="submit" class="btn btn-success">↩️ Восстановить</button>
+            </form>
+            <form th:action="@{'/groups/' + ${group.id} + '/update-original-state-all'}" method="post">
+                <button type="submit" class="btn btn-primary">💾 Обновить стартовые значения (все)</button>
+            </form>
+            <button type="button" class="btn btn-primary" onclick="saveAllScalingsInGroup()" style="background: #4caf50; display: none;" id="saveAllScalingsBtn">
+                💾 Сохранить все
+            </button>
+        </div>
+
+        <!-- Общая панель массовых операций для выбранных deployments из всех подключений -->
+        <div id="globalBatchActions" class="batch-actions hidden" style="margin-bottom: 24px;">
+            <span style="font-weight: 600; color: #333;">Выбрано: <span id="globalSelectedCount">0</span></span>
+            <form id="globalBatchShutdownForm" th:action="@{'/groups/' + ${group.id} + '/batch/shutdown'}" method="post" style="display: inline;">
+                <input type="hidden" name="selectedDeployments" id="globalShutdownDeployments">
+                <button type="submit" class="btn btn-danger" onclick="return confirm('Вы уверены, что хотите остановить выбранные deployments из всех подключений?')">
+                    🛑 Потушить выбранное
+                </button>
+            </form>
+            <form id="globalBatchRestartForm" th:action="@{'/groups/' + ${group.id} + '/batch/restart'}" method="post" style="display: inline;">
+                <input type="hidden" name="selectedDeployments" id="globalRestartDeployments">
+                <button type="submit" class="btn btn-warning">
+                    🔄 Перезапустить выбранное
+                </button>
+            </form>
+            <form id="globalBatchRestoreForm" th:action="@{'/groups/' + ${group.id} + '/batch/restore'}" method="post" style="display: inline;">
+                <input type="hidden" name="selectedDeployments" id="globalRestoreDeployments">
+                <button type="submit" class="btn btn-success">
+                    ↩️ Восстановить выбранное
+                </button>
+            </form>
+        </div>
+
+        <!-- Столбцы подключений -->
+        <div class="group-container" th:if="${connectionsWithDeployments != null and !connectionsWithDeployments.isEmpty()}">
+            <div th:each="connWithDepl : ${connectionsWithDeployments}" class="connection-column">
+                <div class="connection-header">
+                    <h2>
+                        <span th:text="${connWithDepl.connection.name}">Название подключения</span>
+                        <span th:if="${connWithDepl.connection.isMock}" 
+                              style="display: inline-block; padding: 2px 6px; border: 1px solid #999; color: #666; font-size: 10px; font-weight: 400; text-transform: uppercase; margin-left: 8px;">Mock</span>
+                    </h2>
+                    <div class="connection-info">
+                        <div>
+                            <strong>Namespace:</strong>
+                            <span th:text="${connWithDepl.namespace}">namespace</span>
+                        </div>
+                        <div>
+                            <strong>URL:</strong>
+                            <span th:text="${connWithDepl.connection.masterUrl}">URL</span>
+                        </div>
+                    </div>
+                    <!-- Индивидуальные кнопки для каждого проекта -->
+                    <div class="connection-actions" style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                        <form th:action="@{'/groups/' + ${group.id} + '/connections/' + ${connWithDepl.connection.id} + '/shutdown-all'}" method="post">
+                            <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">🛑 Потушить все</button>
+                        </form>
+                        <form th:action="@{'/groups/' + ${group.id} + '/connections/' + ${connWithDepl.connection.id} + '/restart-all'}" method="post">
+                            <button type="submit" class="btn btn-warning" style="padding: 6px 12px; font-size: 12px;">🔄 Рестартнуть все</button>
+                        </form>
+                        <form th:action="@{'/groups/' + ${group.id} + '/connections/' + ${connWithDepl.connection.id} + '/restore'}" method="post">
+                            <button type="submit" class="btn btn-success" style="padding: 6px 12px; font-size: 12px;">↩️ Восстановить</button>
+                        </form>
+                        <form th:action="@{'/groups/' + ${group.id} + '/connections/' + ${connWithDepl.connection.id} + '/update-original-state'}" method="post">
+                            <button type="submit" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;">💾 Обновить стартовые значения</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div th:if="${connWithDepl.error}" class="error-state" th:text="${connWithDepl.error}"></div>
+
+                <div th:if="${connWithDepl.deployments != null and !connWithDepl.deployments.isEmpty()}">
+                    <div class="deployments-list">
+                        <div class="deployment-row" style="background: #fafafa; font-weight: 600; font-size: 12px; text-transform: uppercase; color: #666; padding: 8px 14px;">
+                            <div style="min-width: 18px;">
+                                <input type="checkbox" th:id="'selectAll-' + ${connWithDepl.connection.id}" 
+                                       class="deployment-checkbox" 
+                                       th:onchange="'toggleSelectAllForConnection(' + ${connWithDepl.connection.id} + ')'" 
+                                       title="Выбрать все в этом подключении">
+                            </div>
+                            <div class="deployment-name">Имя</div>
+                            <div class="deployment-info" style="gap: 8px;">Текущие / Стартовое / Готовые</div>
+                            <div class="scale-form" style="min-width: 100px;">Изменить</div>
+                            <div class="deployment-actions" style="min-width: 120px;">Действия</div>
+                        </div>
+                        <div th:each="deployment : ${connWithDepl.deployments}" class="deployment-row">
+                            <div style="min-width: 18px;">
+                                <input type="checkbox" 
+                                       class="deployment-checkbox deployment-select" 
+                                       th:value="${deployment.name}"
+                                       th:data-connection-id="${connWithDepl.connection.id}"
+                                       th:data-namespace="${connWithDepl.namespace}"
+                                       onchange="updateGlobalBatchActions()">
+                            </div>
+                            <div class="deployment-name" th:text="${deployment.name}">Deployment Name</div>
+                            <div class="deployment-info">
+                                <div class="deployment-info-item">
+                                    <span class="deployment-info-label">Текущие:</span>
+                                    <span class="deployment-info-value" th:text="${deployment.currentReplicas}">0</span>
+                                </div>
+                                <div class="deployment-info-item">
+                                    <span class="deployment-info-label">Стартовое:</span>
+                                    <span class="deployment-info-value" th:text="${deployment.originalReplicas ?: deployment.currentReplicas}">0</span>
+                                </div>
+                                <div class="deployment-info-item" th:if="${deployment.readyReplicas != null}">
+                                    <span class="deployment-info-label">Готовые:</span>
+                                    <span class="deployment-info-value" th:text="${deployment.readyReplicas}">0</span>
+                                </div>
+                            </div>
+                            <div class="scale-form">
+                                <form th:id="'scaleForm-' + ${connWithDepl.connection.id} + '-' + ${deployment.name}"
+                                      th:action="@{'/deployments/' + ${connWithDepl.connection.id} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/scale'}" 
+                                      method="post">
+                                    <input type="hidden" name="groupId" th:value="${group.id}">
+                                    <input type="number" 
+                                           name="replicas" 
+                                           th:id="'scaleInput-' + ${connWithDepl.connection.id} + '-' + ${deployment.name}"
+                                           th:value="${deployment.currentReplicas}"
+                                           th:data-original="${deployment.currentReplicas}"
+                                           th:data-connection-id="${connWithDepl.connection.id}"
+                                           th:data-namespace="${connWithDepl.namespace}"
+                                           th:data-deployment-name="${deployment.name}"
+                                           min="0" 
+                                           max="100"
+                                           class="scale-input-small"
+                                           onchange="markAsChangedInGroup(this)"
+                                           required>
+                                    <button type="submit" class="btn-save">OK</button>
+                                </form>
+                            </div>
+                            <div class="deployment-actions">
+                                <form th:action="@{'/deployments/' + ${connWithDepl.connection.id} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/delete'}" method="post">
+                                    <input type="hidden" name="groupId" th:value="${group.id}">
+                                    <button type="submit" class="btn-action btn-delete" title="Остановить">🗑️</button>
+                                </form>
+                                <form th:action="@{'/deployments/' + ${connWithDepl.connection.id} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/restart'}" method="post">
+                                    <input type="hidden" name="groupId" th:value="${group.id}">
+                                    <button type="submit" class="btn-action btn-restart" title="Рестарт">🔄</button>
+                                </form>
+                                <form th:action="@{'/deployments/' + ${connWithDepl.connection.id} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/restore'}" method="post">
+                                    <input type="hidden" name="groupId" th:value="${group.id}">
+                                    <button type="submit" class="btn-action btn-restore" title="Восстановить поды">↩️</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div th:if="${connWithDepl.deployments == null or connWithDepl.deployments.isEmpty()}" class="empty-state">
+                    <p style="font-size: 13px;">Нет deployments</p>
+                </div>
+            </div>
+        </div>
+
+        <div th:if="${connectionsWithDeployments == null or connectionsWithDeployments.isEmpty()}" class="empty-state">
+            <h3>Нет подключений в группе</h3>
+            <p>Добавьте подключения в группу</p>
+        </div>
+    </div>
+
+    <script>
+        function toggleSelectAllForConnection(connectionId) {
+            const selectAll = document.getElementById('selectAll-' + connectionId);
+            const checkboxes = document.querySelectorAll('.deployment-select[data-connection-id="' + connectionId + '"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAll.checked;
+            });
+            updateGlobalBatchActions();
+        }
+
+        function updateGlobalBatchActions() {
+            // Собираем все выбранные deployments из всех подключений
+            const allChecked = document.querySelectorAll('.deployment-select:checked');
+            const selectedCount = allChecked.length;
+            const globalBatchActions = document.getElementById('globalBatchActions');
+            const globalSelectedCount = document.getElementById('globalSelectedCount');
+            
+            if (globalSelectedCount) {
+                globalSelectedCount.textContent = selectedCount;
+            }
+            
+            if (globalBatchActions) {
+                if (selectedCount > 0) {
+                    globalBatchActions.classList.remove('hidden');
+                    
+                    // Формируем данные в формате connectionId|namespace|deploymentName
+                    const selectedDeployments = Array.from(allChecked).map(cb => {
+                        const connectionId = cb.getAttribute('data-connection-id');
+                        const namespace = cb.getAttribute('data-namespace');
+                        const deploymentName = cb.value;
+                        return connectionId + '|' + namespace + '|' + deploymentName;
+                    });
+                    
+                    // Обновляем скрытые поля форм
+                    const shutdownInput = document.getElementById('globalShutdownDeployments');
+                    const restartInput = document.getElementById('globalRestartDeployments');
+                    const restoreInput = document.getElementById('globalRestoreDeployments');
+                    
+                    if (shutdownInput) shutdownInput.value = selectedDeployments.join(',');
+                    if (restartInput) restartInput.value = selectedDeployments.join(',');
+                    if (restoreInput) restoreInput.value = selectedDeployments.join(',');
+                } else {
+                    globalBatchActions.classList.add('hidden');
+                }
+            }
+            
+            // Обновляем состояние "Выбрать все" для каждого подключения
+            const allConnectionIds = new Set();
+            allChecked.forEach(cb => {
+                allConnectionIds.add(cb.getAttribute('data-connection-id'));
+            });
+            
+            // Проверяем каждое подключение
+            document.querySelectorAll('[id^="selectAll-"]').forEach(selectAll => {
+                const connectionId = selectAll.id.replace('selectAll-', '');
+                const checkboxes = document.querySelectorAll('.deployment-select[data-connection-id="' + connectionId + '"]');
+                if (checkboxes.length > 0) {
+                    const checkedInConnection = document.querySelectorAll('.deployment-select[data-connection-id="' + connectionId + '"]:checked');
+                    selectAll.checked = checkedInConnection.length === checkboxes.length;
+                }
+            });
+        }
+
+        // Обработка отправки форм массовых операций для всей группы
+        document.addEventListener('DOMContentLoaded', function() {
+            const globalShutdownForm = document.getElementById('globalBatchShutdownForm');
+            const globalRestartForm = document.getElementById('globalBatchRestartForm');
+            const globalRestoreForm = document.getElementById('globalBatchRestoreForm');
+
+            if (globalShutdownForm) {
+                globalShutdownForm.addEventListener('submit', function(e) {
+                    const selectedDeployments = document.getElementById('globalShutdownDeployments').value;
+                    if (!selectedDeployments) {
+                        e.preventDefault();
+                        alert('Не выбраны deployments для остановки');
+                        return false;
+                    }
+                    const deployments = selectedDeployments.split(',');
+                    const oldInput = document.getElementById('globalShutdownDeployments');
+                    oldInput.remove();
+                    deployments.forEach(deployment => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'selectedDeployments';
+                        input.value = deployment.trim();
+                        this.appendChild(input);
+                    });
+                });
+            }
+
+            if (globalRestartForm) {
+                globalRestartForm.addEventListener('submit', function(e) {
+                    const selectedDeployments = document.getElementById('globalRestartDeployments').value;
+                    if (!selectedDeployments) {
+                        e.preventDefault();
+                        alert('Не выбраны deployments для перезапуска');
+                        return false;
+                    }
+                    const deployments = selectedDeployments.split(',');
+                    const oldInput = document.getElementById('globalRestartDeployments');
+                    oldInput.remove();
+                    deployments.forEach(deployment => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'selectedDeployments';
+                        input.value = deployment.trim();
+                        this.appendChild(input);
+                    });
+                });
+            }
+
+            if (globalRestoreForm) {
+                globalRestoreForm.addEventListener('submit', function(e) {
+                    const selectedDeployments = document.getElementById('globalRestoreDeployments').value;
+                    if (!selectedDeployments) {
+                        e.preventDefault();
+                        alert('Не выбраны deployments для восстановления');
+                        return false;
+                    }
+                    const deployments = selectedDeployments.split(',');
+                    const oldInput = document.getElementById('globalRestoreDeployments');
+                    oldInput.remove();
+                    deployments.forEach(deployment => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'selectedDeployments';
+                        input.value = deployment.trim();
+                        this.appendChild(input);
+                    });
+                });
+            }
+        });
+
+        // Отслеживание измененных полей ввода в группе
+        function markAsChangedInGroup(input) {
+            input.classList.add('changed');
+            updateSaveAllButtonInGroup();
+        }
+
+        // Обновление видимости кнопки "Сохранить все" в группе
+        function updateSaveAllButtonInGroup() {
+            const changedInputs = document.querySelectorAll('.scale-input-small.changed');
+            const saveAllBtn = document.getElementById('saveAllScalingsBtn');
+            if (saveAllBtn) {
+                if (changedInputs.length > 0) {
+                    saveAllBtn.style.display = 'inline-block';
+                    saveAllBtn.textContent = '💾 Сохранить все (' + changedInputs.length + ')';
+                } else {
+                    saveAllBtn.style.display = 'none';
+                }
+            }
+        }
+
+        // Сохранение всех измененных масштабирований в группе
+        function saveAllScalingsInGroup() {
+            const changedInputs = document.querySelectorAll('.scale-input-small.changed');
+            if (changedInputs.length === 0) {
+                alert('Нет изменений для сохранения');
+                return;
+            }
+
+            const scalingData = [];
+            changedInputs.forEach(input => {
+                const connectionId = input.getAttribute('data-connection-id');
+                const namespace = input.getAttribute('data-namespace');
+                const deploymentName = input.getAttribute('data-deployment-name');
+                const newValue = input.value;
+                const originalValue = input.getAttribute('data-original');
+                
+                // Сохраняем только если значение действительно изменилось
+                if (newValue !== originalValue && connectionId && namespace && deploymentName) {
+                    scalingData.push(connectionId + '|' + namespace + '|' + deploymentName + '|' + newValue);
+                }
+            });
+
+            if (scalingData.length === 0) {
+                alert('Нет изменений для сохранения');
+                return;
+            }
+
+            // Получаем groupId из Thymeleaf
+            const groupId = /*[[${group.id}]]*/ null;
+            
+            if (!groupId) {
+                alert('Ошибка: не найден ID группы');
+                return;
+            }
+
+            // Создаем форму для отправки
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/groups/' + groupId + '/batch/scale';
+            
+            scalingData.forEach(data => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'scalingData';
+                input.value = data;
+                form.appendChild(input);
+            });
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+
+        // Инициализация при загрузке страницы для группы
+        document.addEventListener('DOMContentLoaded', function() {
+            updateSaveAllButtonInGroup();
+            
+            // Отслеживаем изменения при вводе
+            document.querySelectorAll('.scale-input-small').forEach(input => {
+                const originalValue = input.value;
+                input.setAttribute('data-original', originalValue);
+                
+                input.addEventListener('input', function() {
+                    markAsChangedInGroup(this);
+                });
+                
+                // Сбрасываем флаг "изменено" при успешном сохранении отдельной формы
+                const form = input.closest('form');
+                if (form) {
+                    form.addEventListener('submit', function() {
+                        setTimeout(() => {
+                            const currentInput = document.getElementById(input.id);
+                            if (currentInput) {
+                                currentInput.classList.remove('changed');
+                                currentInput.setAttribute('data-original', currentInput.value);
+                            }
+                            updateSaveAllButtonInGroup();
+                        }, 100);
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+

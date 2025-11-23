@@ -272,9 +272,45 @@
             margin-bottom: 8px;
         }
 
+        .pod-header-checkbox {
+            min-width: 30px;
+            flex-shrink: 0;
+        }
+
+        .pod-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
         .pod-header-name {
             min-width: 200px;
             flex-shrink: 0;
+        }
+
+        .batch-actions {
+            background: white;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .batch-actions.hidden {
+            display: none;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
         }
 
         .pod-header-status {
@@ -349,6 +385,12 @@
         form {
             display: inline;
         }
+
+        .alert-warning {
+            background: #feebc8;
+            color: #7c2d12;
+            border-left: 4px solid #f6ad55;
+        }
     </style>
 </head>
 <body>
@@ -360,6 +402,7 @@
 
         <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
         <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+        <div th:if="${warning}" class="alert alert-warning" th:text="${warning}"></div>
 
         <div class="stats">
             <div class="stat-card">
@@ -384,8 +427,30 @@
                 <h2>Поды</h2>
             </div>
 
+            <!-- Кнопки массовых операций -->
+            <div id="batchActions" class="batch-actions hidden">
+                <span style="font-weight: 600; color: #4a5568;">Выбрано: <span id="selectedCount">0</span></span>
+                <form id="batchDeleteForm" th:action="@{/pods/batch/delete}" method="post" style="display: inline;">
+                    <input type="hidden" name="namespace" th:value="${namespace}">
+                    <input type="hidden" name="podNames" id="deletePodNames">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('Вы уверены, что хотите удалить выбранные поды?')">
+                        🗑️ Потушить выбранное
+                    </button>
+                </form>
+                <form id="batchRestartForm" th:action="@{/pods/batch/restart}" method="post" style="display: inline;">
+                    <input type="hidden" name="namespace" th:value="${namespace}">
+                    <input type="hidden" name="podNames" id="restartPodNames">
+                    <button type="submit" class="btn btn-warning">
+                        🔄 Перезапустить выбранное
+                    </button>
+                </form>
+            </div>
+
             <div th:if="${pods != null and !pods.isEmpty()}">
                 <div class="pod-header-row">
+                    <div class="pod-header-checkbox">
+                        <input type="checkbox" id="selectAll" class="pod-checkbox" onchange="toggleSelectAll()" title="Выбрать все">
+                    </div>
                     <div class="pod-header-name">Имя</div>
                     <div class="pod-header-status">Статус</div>
                     <div class="pod-header-namespace">Namespace</div>
@@ -395,6 +460,12 @@
                 </div>
                 <div class="pods-list">
                 <div th:each="pod : ${pods}" class="pod-row">
+                    <div class="pod-header-checkbox">
+                        <input type="checkbox" class="pod-checkbox pod-select" 
+                               th:value="${pod.name}" 
+                               th:data-namespace="${pod.namespace}"
+                               onchange="updateBatchActions()">
+                    </div>
                     <div class="pod-name" th:text="${pod.name}">pod-name</div>
                     <span class="pod-status" 
                           th:classappend="${pod.status == 'Running'} ? 'status-running' : 
@@ -410,14 +481,12 @@
                         <a th:href="@{'/pod/' + ${pod.namespace} + '/' + ${pod.name}}" class="btn btn-secondary btn-sm">📄</a>
                         <form th:action="@{'/pod/' + ${pod.namespace} + '/' + ${pod.name} + '/restart'}" method="post">
                             <button type="submit" class="btn btn-warning btn-sm" 
-                                    onclick="return confirm('Перезапустить под ' + this.form.action.split('/').pop() + '?')"
                                     title="Перезапустить">
                                 🔄
                             </button>
                         </form>
                         <form th:action="@{'/pod/' + ${pod.namespace} + '/' + ${pod.name} + '/delete'}" method="post">
                             <button type="submit" class="btn btn-danger btn-sm"
-                                    onclick="return confirm('Удалить под ' + this.form.action.split('/').pop() + '? Это действие нельзя отменить!')"
                                     title="Удалить">
                                 🗑️
                             </button>
@@ -438,6 +507,89 @@
             </div>
         </div>
     </div>
+
+    <script>
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.pod-select');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAll.checked;
+            });
+            updateBatchActions();
+        }
+
+        function updateBatchActions() {
+            const checkboxes = document.querySelectorAll('.pod-select:checked');
+            const selectedCount = checkboxes.length;
+            const batchActions = document.getElementById('batchActions');
+            const selectedCountSpan = document.getElementById('selectedCount');
+            
+            selectedCountSpan.textContent = selectedCount;
+            
+            if (selectedCount > 0) {
+                batchActions.classList.remove('hidden');
+                
+                // Обновляем скрытые поля форм
+                const podNames = Array.from(checkboxes).map(cb => cb.value);
+                document.getElementById('deletePodNames').value = podNames.join(',');
+                document.getElementById('restartPodNames').value = podNames.join(',');
+            } else {
+                batchActions.classList.add('hidden');
+            }
+            
+            // Обновляем состояние "Выбрать все"
+            const allCheckboxes = document.querySelectorAll('.pod-select');
+            const selectAll = document.getElementById('selectAll');
+            if (allCheckboxes.length > 0) {
+                selectAll.checked = selectedCount === allCheckboxes.length;
+            }
+        }
+
+        // Обработка отправки форм массовых операций
+        document.getElementById('batchDeleteForm').addEventListener('submit', function(e) {
+            const podNames = document.getElementById('deletePodNames').value;
+            if (!podNames) {
+                e.preventDefault();
+                alert('Не выбраны поды для удаления');
+                return false;
+            }
+            // Преобразуем строку в массив для Spring - добавляем скрытые поля
+            const names = podNames.split(',');
+            // Удаляем старое скрытое поле
+            const oldInput = document.getElementById('deletePodNames');
+            oldInput.remove();
+            // Добавляем новое поле для каждого имени
+            names.forEach(name => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'podNames';
+                input.value = name.trim();
+                this.appendChild(input);
+            });
+        });
+
+        document.getElementById('batchRestartForm').addEventListener('submit', function(e) {
+            const podNames = document.getElementById('restartPodNames').value;
+            if (!podNames) {
+                e.preventDefault();
+                alert('Не выбраны поды для перезапуска');
+                return false;
+            }
+            // Преобразуем строку в массив для Spring - добавляем скрытые поля
+            const names = podNames.split(',');
+            // Удаляем старое скрытое поле
+            const oldInput = document.getElementById('restartPodNames');
+            oldInput.remove();
+            // Добавляем новое поле для каждого имени
+            names.forEach(name => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'podNames';
+                input.value = name.trim();
+                this.appendChild(input);
+            });
+        });
+    </script>
 </body>
 </html>
 

@@ -259,6 +259,32 @@
             margin-top: 30px;
         }
 
+        .top-buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            justify-content: center;
+        }
+
+        .top-buttons .btn {
+            padding: 14px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            min-width: 200px;
+            text-align: center;
+        }
+
+        .top-buttons .btn-orange {
+            background: #ff9800;
+            color: white;
+        }
+
+        .top-buttons .btn-orange:hover {
+            background: #fb8c00;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
         .empty-state {
             text-align: center;
             padding: 40px 20px;
@@ -283,45 +309,18 @@
             <p>Добавляйте и управляйте подключениями к OpenShift кластерам</p>
         </div>
 
-        <!-- Список подключений -->
-        <div class="connections-list">
-            <h2>Существующие подключения</h2>
-            
-            <div th:if="${connections != null and !connections.isEmpty()}">
-                <div th:each="conn : ${connections}" 
-                     class="connection-item" 
-                     th:classappend="${conn.active} ? 'active' : ''">
-                    <div class="connection-header">
-                        <div class="connection-name">
-                            <span th:text="${conn.name}">Название</span>
-                            <span th:if="${conn.active}" class="badge">Активно</span>
-                        </div>
-                    </div>
-                    <div class="connection-info">
-                        <strong>URL:</strong> <span th:text="${conn.masterUrl}">URL</span>
-                    </div>
-                    <div class="connection-info" th:if="${conn.defaultNamespace}">
-                        <strong>Namespace:</strong> <span th:text="${conn.defaultNamespace}">namespace</span>
-                    </div>
-                    <div class="connection-actions">
-                        <form th:if="${!conn.active}" th:action="@{/connection/activate}" method="post">
-                            <input type="hidden" name="id" th:value="${conn.id}">
-                            <button type="submit" class="btn btn-success">Активировать</button>
-                        </form>
-                        <a th:href="@{/connection/setup(editId=${conn.id})}" class="btn btn-warning">Редактировать</a>
-                        <form th:action="@{/connection/delete}" method="post" 
-                              onsubmit="return confirm('Вы уверены, что хотите удалить это подключение?')">
-                            <input type="hidden" name="id" th:value="${conn.id}">
-                            <button type="submit" class="btn btn-danger">Удалить</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <div th:if="${connections == null or connections.isEmpty()}" class="empty-state">
-                <h3>Нет подключений</h3>
-                <p>Добавьте первое подключение, используя форму ниже</p>
-            </div>
+        <!-- Кнопки навигации сверху -->
+        <div class="top-buttons">
+            <button type="button" 
+                    onclick="document.getElementById('connectionForm').submit();" 
+                    class="btn btn-orange">
+                <span th:text="${editingConnection != null ? 'Обновить подключение' : 'Сохранить подключение'}">
+                    Сохранить подключение
+                </span>
+            </button>
+            <a href="/" class="btn btn-secondary">
+                На главную
+            </a>
         </div>
 
         <!-- Форма добавления/редактирования -->
@@ -334,7 +333,15 @@
             <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
             <div th:if="${warning}" class="alert alert-warning" th:text="${warning}"></div>
 
-            <form th:action="${editingConnection != null ? '/connection/update' : '/connection/save'}" method="post">
+            <!-- Кнопка для быстрого создания тестового подключения -->
+            <div style="margin-bottom: 25px; padding: 15px; background: #feebc8; border-radius: 8px; border-left: 4px solid #ed8936;">
+                <strong>🧪 Для тестирования:</strong> Создайте тестовое mock-подключение с предзаполненными данными
+                <form th:action="@{/connection/create-mock}" method="post" style="margin-top: 10px;">
+                    <button type="submit" class="btn btn-warning">Создать тестовое подключение</button>
+                </form>
+            </div>
+
+            <form id="connectionForm" th:action="${editingConnection != null ? '/connection/update' : '/connection/save'}" method="post">
                 <input th:if="${editingConnection != null}" type="hidden" name="id" th:value="${editingConnection.id}">
                 
                 <div class="form-group">
@@ -362,12 +369,63 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="defaultNamespace">Namespace по умолчанию (необязательно)</label>
-                    <input type="text" id="defaultNamespace" name="defaultNamespace" 
-                           th:value="${editingConnection?.defaultNamespace}"
-                           placeholder="my-project">
-                    <small>Namespace, который будет использоваться по умолчанию</small>
+                    <label for="namespace">Namespace (проект) *</label>
+                    <input type="text" id="namespace" name="namespace" 
+                           th:value="${editingConnection?.namespace}"
+                           placeholder="my-project" required>
+                    <small>Namespace (проект) для этого подключения. Одно подключение = один namespace</small>
                 </div>
+
+                <div class="form-group">
+                    <label for="groupId">Группа (необязательно)</label>
+                    <div style="display: flex; gap: 10px; align-items: flex-start;">
+                        <select id="groupId" name="groupId" 
+                                style="flex: 1; padding: 12px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px;"
+                                onchange="toggleNewGroupInput(this.value)">
+                            <option value="">Без группы</option>
+                            <option value="__NEW__">+ Создать новую группу</option>
+                            <option th:each="group : ${groups}" 
+                                    th:value="${group.id}" 
+                                    th:text="${group.name}"
+                                    th:selected="${editingConnection?.group?.id == group.id}">
+                                Группа
+                            </option>
+                        </select>
+                    </div>
+                    <div id="newGroupContainer" style="display: none; margin-top: 10px;">
+                        <input type="text" id="newGroupName" name="newGroupName" 
+                               placeholder="Название новой группы"
+                               style="width: 100%; padding: 12px 16px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px;">
+                        <small style="display: block; margin-top: 5px; color: #718096;">Введите название для создания новой группы</small>
+                    </div>
+                    <small style="display: block; margin-top: 8px; color: #718096;">Выберите существующую группу или создайте новую для объединения нескольких подключений</small>
+                </div>
+
+                <script>
+                    function toggleNewGroupInput(value) {
+                        const container = document.getElementById('newGroupContainer');
+                        const newGroupName = document.getElementById('newGroupName');
+                        const groupIdSelect = document.getElementById('groupId');
+                        
+                        if (value === '__NEW__') {
+                            container.style.display = 'block';
+                            newGroupName.required = true;
+                            newGroupName.focus();
+                        } else {
+                            container.style.display = 'none';
+                            newGroupName.required = false;
+                            newGroupName.value = '';
+                        }
+                    }
+                    
+                    // Проверяем, выбрана ли опция "Создать новую группу" при загрузке (если редактирование)
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const groupIdSelect = document.getElementById('groupId');
+                        if (groupIdSelect && groupIdSelect.value === '__NEW__') {
+                            toggleNewGroupInput('__NEW__');
+                        }
+                    });
+                </script>
 
                 <div class="form-group" th:if="${editingConnection == null and hasActiveConnection}">
                     <label style="display: flex; align-items: center; cursor: pointer;">
@@ -377,18 +435,64 @@
                     </label>
                 </div>
 
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" name="isMock" value="true" 
+                               th:checked="${editingConnection?.isMock}"
+                               style="width: auto; margin-right: 8px;">
+                        <span>Это mock-подключение (для тестирования, использует тестовые данные вместо реального кластера)</span>
+                    </label>
+                    <small>Mock-подключение позволяет протестировать интерфейс без реального OpenShift кластера</small>
+                </div>
+
                 <div class="btn-container">
-                    <button type="submit" class="btn btn-primary">
-                        <span th:text="${editingConnection != null ? 'Обновить подключение' : 'Добавить подключение'}">
-                            Добавить подключение
-                        </span>
-                    </button>
                     <a th:if="${editingConnection != null}" 
                        href="/connection/setup" 
                        class="btn btn-secondary">Отмена</a>
-                    <a th:if="${hasActiveConnection}" href="/" class="btn btn-secondary">На главную</a>
                 </div>
             </form>
+        </div>
+
+        <!-- Список подключений -->
+        <div class="connections-list">
+            <h2>Существующие подключения</h2>
+            
+            <div th:if="${connections != null and !connections.isEmpty()}">
+                <div th:each="conn : ${connections}" 
+                     class="connection-item" 
+                     th:classappend="${conn.active} ? 'active' : ''">
+                    <div class="connection-header">
+                        <div class="connection-name">
+                            <span th:text="${conn.name}">Название</span>
+                            <span th:if="${conn.active}" class="badge">Активно</span>
+                            <span th:if="${conn.isMock}" class="badge" style="background: #ed8936;">Mock</span>
+                        </div>
+                    </div>
+                    <div class="connection-info">
+                        <strong>URL:</strong> <span th:text="${conn.masterUrl}">URL</span>
+                    </div>
+                    <div class="connection-info" th:if="${conn.namespace}">
+                        <strong>Namespace:</strong> <span th:text="${conn.namespace}">namespace</span>
+                    </div>
+                    <div class="connection-actions">
+                        <form th:if="${!conn.active}" th:action="@{/connection/activate}" method="post">
+                            <input type="hidden" name="id" th:value="${conn.id}">
+                            <button type="submit" class="btn btn-success">Активировать</button>
+                        </form>
+                        <a th:href="@{/connection/setup(editId=${conn.id})}" class="btn btn-warning">Редактировать</a>
+                        <form th:action="@{/connection/delete}" method="post" 
+>
+                            <input type="hidden" name="id" th:value="${conn.id}">
+                            <button type="submit" class="btn btn-danger">Удалить</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div th:if="${connections == null or connections.isEmpty()}" class="empty-state">
+                <h3>Нет подключений</h3>
+                <p>Добавьте первое подключение, используя форму выше</p>
+            </div>
         </div>
     </div>
 </body>

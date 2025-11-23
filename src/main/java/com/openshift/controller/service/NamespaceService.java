@@ -1,5 +1,6 @@
 package com.openshift.controller.service;
 
+import com.openshift.controller.entity.OpenShiftConnection;
 import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.api.model.NamespaceList;
 import io.fabric8.kubernetes.client.KubernetesClientException;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -21,9 +23,19 @@ import java.util.stream.Collectors;
 public class NamespaceService {
 
     private final OpenShiftClientService openShiftClientService;
+    private final ConnectionService connectionService;
+    private final MockDataService mockDataService;
     
     /**
-     * Получить OpenShift клиент
+     * Получить OpenShift клиент для конкретного подключения
+     */
+    private OpenShiftClient getClient(Long connectionId) {
+        return openShiftClientService.getClientForConnection(connectionId)
+                .orElseThrow(() -> new RuntimeException("Подключение к OpenShift не настроено. Пожалуйста, настройте подключение на главной странице."));
+    }
+
+    /**
+     * Получить OpenShift клиент (для обратной совместимости - использует активное подключение)
      */
     private OpenShiftClient getClient() {
         return openShiftClientService.getClient()
@@ -31,25 +43,32 @@ public class NamespaceService {
     }
     
     /**
-     * Получить namespace по умолчанию из активного подключения
+     * Получить namespace из подключения
      */
-    private String getDefaultNamespace() {
-        return openShiftClientService.getActiveConnection()
-                .map(conn -> conn.getDefaultNamespace() != null ? conn.getDefaultNamespace() : "default")
+    private String getNamespace(Long connectionId) {
+        return connectionService.getConnectionById(connectionId)
+                .map(conn -> conn.getNamespace() != null ? conn.getNamespace() : "default")
                 .orElse("default");
     }
 
     /**
-     * Получить список всех Namespaces
+     * Получить список всех Namespaces для конкретного подключения
      * 
      * Если у пользователя нет прав на получение списка всех namespace на уровне кластера (403 Forbidden),
      * возвращает список с одним доступным namespace из конфигурации.
      */
-    public List<String> getAllNamespaces() {
-        log.info("Получение списка всех Namespaces");
+    public List<String> getAllNamespaces(Long connectionId) {
+        log.info("Получение списка всех Namespaces для подключения ID: {}", connectionId);
         
-        OpenShiftClient openShiftClient = getClient();
-        String defaultNamespace = getDefaultNamespace();
+        // Проверяем mock-подключение
+        Optional<OpenShiftConnection> connectionOpt = connectionService.getConnectionById(connectionId);
+        if (connectionOpt.isPresent() && connectionOpt.get().getIsMock() != null && connectionOpt.get().getIsMock()) {
+            log.info("Использование mock-данных для namespaces");
+            return mockDataService.getMockNamespaces();
+        }
+        
+        OpenShiftClient openShiftClient = getClient(connectionId);
+        String defaultNamespace = getNamespace(connectionId);
         
         try {
             NamespaceList namespaceList = openShiftClient.namespaces().list();
@@ -90,6 +109,15 @@ public class NamespaceService {
                 throw e;
             }
         }
+    }
+
+    /**
+     * Получить список всех Namespaces (для обратной совместимости - использует активное подключение)
+     */
+    public List<String> getAllNamespaces() {
+        return openShiftClientService.getActiveConnection()
+                .map(conn -> getAllNamespaces(conn.getId()))
+                .orElseThrow(() -> new RuntimeException("Активное подключение не найдено"));
     }
 }
 
