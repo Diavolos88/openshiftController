@@ -143,6 +143,17 @@
             background: #1e88e5;
         }
 
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(50%);
+        }
+
+        .btn:disabled:hover {
+            box-shadow: none;
+            transform: none;
+        }
+
         .deployments-container {
             background: white;
             border: 1px solid #ddd;
@@ -406,50 +417,58 @@
         <div class="header">
             <a href="/" class="back-link">← Назад к проектам</a>
             <h1>🚀 <span th:text="${namespace}">namespace</span></h1>
+            <div th:if="${lastUpdateDate != null}" style="margin-top: 16px; font-size: 35px; font-weight: 600; color: #333; text-align: center; padding: 12px 0; background: #f8f9fa; border-radius: 4px; border: 1px solid #e0e0e0;">
+                Последнее обновление стартовых значений: 
+                <span style="color: #2196f3; font-weight: 700;" th:text="${#temporals.format(lastUpdateDate, 'HH:mm:ss dd.MM.yyyy')}"></span>
+            </div>
         </div>
 
         <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
         <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
 
         <!-- Кнопки массовых операций -->
-        <div id="batchActions" class="batch-actions hidden" th:if="${connectionId != null}">
-            <span style="font-weight: 600; color: #333;">Выбрано: <span id="selectedCount">0</span></span>
+        <div class="actions-bar" th:if="${connectionId != null}">
+            <span style="font-weight: 600; color: #333; margin-right: 12px;">Выбрано: <span id="selectedCount">0</span></span>
             <form id="batchShutdownForm" th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/batch/shutdown'}" method="post" style="display: inline;">
                 <input type="hidden" name="deploymentNames" id="shutdownDeploymentNames">
-                <button type="submit" class="btn btn-danger" onclick="return confirm('Вы уверены, что хотите остановить выбранные deployments?')">
+                <button type="submit" class="btn btn-danger" id="batchShutdownBtn" disabled>
                     🛑 Потушить выбранное
                 </button>
             </form>
             <form id="batchRestartForm" th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/batch/restart'}" method="post" style="display: inline;">
                 <input type="hidden" name="deploymentNames" id="restartDeploymentNames">
-                <button type="submit" class="btn btn-warning">
+                <button type="submit" class="btn btn-warning" id="batchRestartBtn" disabled>
                     🔄 Перезапустить выбранное
                 </button>
             </form>
             <form id="batchRestoreForm" th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/batch/restore'}" method="post" style="display: inline;">
                 <input type="hidden" name="deploymentNames" id="restoreDeploymentNames">
-                <button type="submit" class="btn btn-success">
+                <button type="submit" class="btn btn-success" id="batchRestoreBtn" disabled>
                     ↩️ Восстановить выбранное
                 </button>
             </form>
-        </div>
-
-        <div class="actions-bar">
-            <form th:if="${connectionId != null}" th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/shutdown-all'}" method="post">
-                <button type="submit" class="btn btn-danger">🛑 Потушить все</button>
-            </form>
-            <form th:if="${connectionId != null}" th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/restart-all'}" method="post">
-                <button type="submit" class="btn btn-warning">🔄 Рестартнуть все</button>
-            </form>
-            <form th:if="${connectionId != null}" th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/restore'}" method="post">
-                <button type="submit" class="btn btn-success">↩️ Восстановить</button>
-            </form>
-            <form th:if="${connectionId != null}" th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/update-original-state'}" method="post">
+            <form th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/update-original-state'}" method="post" style="display: inline;">
                 <button type="submit" class="btn btn-primary">💾 Обновить стартовые значения</button>
             </form>
-            <button th:if="${connectionId != null}" type="button" class="btn btn-primary" onclick="saveAllScalings()" style="background: #4caf50;">
+            <button type="button" 
+                    class="btn btn-primary" 
+                    onclick="saveAllScalings()" 
+                    th:data-connection-id="${connectionId}"
+                    th:data-namespace="${namespace}"
+                    id="saveAllScalingsBtn"
+                    style="background: #4caf50;"
+                    disabled>
                 💾 Сохранить все
             </button>
+        </div>
+
+        <!-- Поисковая строка -->
+        <div th:if="${connectionId != null}" style="background: white; border: 1px solid #ddd; border-radius: 4px; padding: 16px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <input type="text" 
+                   id="deploymentSearch" 
+                   placeholder="Поиск по названию deployment..." 
+                   style="width: 100%; padding: 10px 16px; font-size: 14px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;"
+                   oninput="filterDeployments()">
         </div>
 
         <div class="deployments-container">
@@ -531,31 +550,39 @@
         function updateBatchActions() {
             const checkboxes = document.querySelectorAll('.deployment-select:checked');
             const selectedCount = checkboxes.length;
-            const batchActions = document.getElementById('batchActions');
             const selectedCountSpan = document.getElementById('selectedCount');
             
             if (selectedCountSpan) {
                 selectedCountSpan.textContent = selectedCount;
             }
             
-            if (batchActions) {
-                if (selectedCount > 0) {
-                    batchActions.classList.remove('hidden');
-                    
-                    // Обновляем скрытые поля форм
-                    const deploymentNames = Array.from(checkboxes).map(cb => cb.value);
-                    if (document.getElementById('shutdownDeploymentNames')) {
-                        document.getElementById('shutdownDeploymentNames').value = deploymentNames.join(',');
-                    }
-                    if (document.getElementById('restartDeploymentNames')) {
-                        document.getElementById('restartDeploymentNames').value = deploymentNames.join(',');
-                    }
-                    if (document.getElementById('restoreDeploymentNames')) {
-                        document.getElementById('restoreDeploymentNames').value = deploymentNames.join(',');
-                    }
-                } else {
-                    batchActions.classList.add('hidden');
+            // Обновляем активность кнопок массовых операций
+            const batchShutdownBtn = document.getElementById('batchShutdownBtn');
+            const batchRestartBtn = document.getElementById('batchRestartBtn');
+            const batchRestoreBtn = document.getElementById('batchRestoreBtn');
+            
+            if (selectedCount > 0) {
+                // Обновляем скрытые поля форм
+                const deploymentNames = Array.from(checkboxes).map(cb => cb.value);
+                if (document.getElementById('shutdownDeploymentNames')) {
+                    document.getElementById('shutdownDeploymentNames').value = deploymentNames.join(',');
                 }
+                if (document.getElementById('restartDeploymentNames')) {
+                    document.getElementById('restartDeploymentNames').value = deploymentNames.join(',');
+                }
+                if (document.getElementById('restoreDeploymentNames')) {
+                    document.getElementById('restoreDeploymentNames').value = deploymentNames.join(',');
+                }
+                
+                // Активируем кнопки
+                if (batchShutdownBtn) batchShutdownBtn.disabled = false;
+                if (batchRestartBtn) batchRestartBtn.disabled = false;
+                if (batchRestoreBtn) batchRestoreBtn.disabled = false;
+            } else {
+                // Деактивируем кнопки
+                if (batchShutdownBtn) batchShutdownBtn.disabled = true;
+                if (batchRestartBtn) batchRestartBtn.disabled = true;
+                if (batchRestoreBtn) batchRestoreBtn.disabled = true;
             }
             
             // Обновляем состояние "Выбрать все"
@@ -640,16 +667,17 @@
             updateSaveAllButton();
         }
 
-        // Обновление видимости кнопки "Сохранить все"
+        // Обновление видимости и активности кнопки "Сохранить все"
         function updateSaveAllButton() {
             const changedInputs = document.querySelectorAll('.scale-input.changed');
-            const saveAllBtn = document.querySelector('button[onclick="saveAllScalings()"]');
+            const saveAllBtn = document.getElementById('saveAllScalingsBtn');
             if (saveAllBtn) {
                 if (changedInputs.length > 0) {
-                    saveAllBtn.style.display = 'inline-block';
+                    saveAllBtn.disabled = false;
                     saveAllBtn.textContent = '💾 Сохранить все (' + changedInputs.length + ')';
                 } else {
-                    saveAllBtn.style.display = 'none';
+                    saveAllBtn.disabled = true;
+                    saveAllBtn.textContent = '💾 Сохранить все';
                 }
             }
         }
@@ -679,9 +707,15 @@
                 return;
             }
 
-            // Получаем connectionId и namespace из Thymeleaf
-            const connectionId = /*[[${connectionId}]]*/ null;
-            const namespace = /*[[${namespace}]]*/ null;
+            // Получаем connectionId и namespace из data-атрибутов кнопки
+            const saveAllBtn = document.querySelector('button[onclick="saveAllScalings()"]');
+            if (!saveAllBtn) {
+                alert('Ошибка: кнопка "Сохранить все" не найдена');
+                return;
+            }
+            
+            const connectionId = saveAllBtn.getAttribute('data-connection-id');
+            const namespace = saveAllBtn.getAttribute('data-namespace');
             
             if (!connectionId || !namespace) {
                 alert('Ошибка: не найдены данные подключения');
@@ -703,6 +737,28 @@
 
             document.body.appendChild(form);
             form.submit();
+        }
+
+        // Фильтрация deployments по названию
+        function filterDeployments() {
+            const searchInput = document.getElementById('deploymentSearch');
+            const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const deploymentRows = document.querySelectorAll('.deployment-row');
+            
+            deploymentRows.forEach(row => {
+                const deploymentNameElement = row.querySelector('.deployment-name');
+                if (deploymentNameElement) {
+                    const deploymentName = deploymentNameElement.textContent.toLowerCase().trim();
+                    if (deploymentName.includes(searchTerm)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Обновляем состояние "Выбрать все" после фильтрации
+            updateBatchActions();
         }
 
         // Инициализация при загрузке страницы

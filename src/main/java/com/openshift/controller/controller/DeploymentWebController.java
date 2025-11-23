@@ -6,6 +6,7 @@ import com.openshift.controller.entity.OpenShiftConnection;
 import com.openshift.controller.service.ConnectionGroupService;
 import com.openshift.controller.service.ConnectionService;
 import com.openshift.controller.service.DeploymentService;
+import com.openshift.controller.service.StateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -29,6 +30,7 @@ public class DeploymentWebController {
     private final DeploymentService deploymentService;
     private final ConnectionService connectionService;
     private final ConnectionGroupService connectionGroupService;
+    private final StateService stateService;
 
     /**
      * Главная страница - список всех групп с подключениями
@@ -167,9 +169,13 @@ public class DeploymentWebController {
                 log.info("Автоматически сохранены стартовые значения при первом подключении для подключения ID: {}, namespace: {}", connectionId, namespace);
             }
             
+            // Получаем дату последнего обновления стартовых значений
+            java.time.LocalDateTime lastUpdateDate = stateService.getLastUpdateDate(connectionId, namespace);
+            
             model.addAttribute("deployments", deployments);
             model.addAttribute("namespace", namespace);
             model.addAttribute("connectionId", connectionId);
+            model.addAttribute("lastUpdateDate", lastUpdateDate);
         } catch (RuntimeException e) {
             log.error("Ошибка при получении списка Deployments в namespace '{}' для подключения ID: {}", namespace, connectionId, e);
             // Проверяем, содержит ли сообщение об ошибке информацию о доступе

@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,5 +42,11 @@ public interface DeploymentStateRepository extends JpaRepository<DeploymentState
      */
     @Modifying
     void deleteByConnectionIdAndNamespaceAndDeploymentName(Long connectionId, String namespace, String deploymentName);
+    
+    /**
+     * Получить максимальную дату обновления для namespace подключения
+     */
+    @Query("SELECT MAX(ds.updatedAt) FROM DeploymentState ds WHERE ds.connection.id = :connectionId AND ds.namespace = :namespace")
+    Optional<LocalDateTime> findMaxUpdatedAtByConnectionIdAndNamespace(@Param("connectionId") Long connectionId, @Param("namespace") String namespace);
 }
 

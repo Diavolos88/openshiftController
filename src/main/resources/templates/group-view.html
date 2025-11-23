@@ -141,6 +141,17 @@
             background: #1e88e5;
         }
 
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(50%);
+        }
+
+        .btn:disabled:hover {
+            box-shadow: none;
+            transform: none;
+        }
+
         .group-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
@@ -430,46 +441,42 @@
         <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
         <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
 
-        <!-- Массовые операции для всей группы -->
-        <div class="actions-bar">
-            <form th:action="@{'/groups/' + ${group.id} + '/shutdown-all'}" method="post">
-                <button type="submit" class="btn btn-danger">🛑 Потушить все</button>
-            </form>
-            <form th:action="@{'/groups/' + ${group.id} + '/restart-all'}" method="post">
-                <button type="submit" class="btn btn-warning">🔄 Рестартнуть все</button>
-            </form>
-            <form th:action="@{'/groups/' + ${group.id} + '/restore'}" method="post">
-                <button type="submit" class="btn btn-success">↩️ Восстановить</button>
-            </form>
-            <form th:action="@{'/groups/' + ${group.id} + '/update-original-state-all'}" method="post">
-                <button type="submit" class="btn btn-primary">💾 Обновить стартовые значения (все)</button>
-            </form>
-            <button type="button" class="btn btn-primary" onclick="saveAllScalingsInGroup()" style="background: #4caf50; display: none;" id="saveAllScalingsBtn">
-                💾 Сохранить все
-            </button>
-        </div>
-
         <!-- Общая панель массовых операций для выбранных deployments из всех подключений -->
-        <div id="globalBatchActions" class="batch-actions hidden" style="margin-bottom: 24px;">
-            <span style="font-weight: 600; color: #333;">Выбрано: <span id="globalSelectedCount">0</span></span>
+        <div class="actions-bar" style="margin-bottom: 24px;">
+            <span style="font-weight: 600; color: #333; margin-right: 12px;">Выбрано: <span id="globalSelectedCount">0</span></span>
             <form id="globalBatchShutdownForm" th:action="@{'/groups/' + ${group.id} + '/batch/shutdown'}" method="post" style="display: inline;">
                 <input type="hidden" name="selectedDeployments" id="globalShutdownDeployments">
-                <button type="submit" class="btn btn-danger" onclick="return confirm('Вы уверены, что хотите остановить выбранные deployments из всех подключений?')">
+                <button type="submit" class="btn btn-danger" id="globalBatchShutdownBtn" disabled>
                     🛑 Потушить выбранное
                 </button>
             </form>
             <form id="globalBatchRestartForm" th:action="@{'/groups/' + ${group.id} + '/batch/restart'}" method="post" style="display: inline;">
                 <input type="hidden" name="selectedDeployments" id="globalRestartDeployments">
-                <button type="submit" class="btn btn-warning">
+                <button type="submit" class="btn btn-warning" id="globalBatchRestartBtn" disabled>
                     🔄 Перезапустить выбранное
                 </button>
             </form>
             <form id="globalBatchRestoreForm" th:action="@{'/groups/' + ${group.id} + '/batch/restore'}" method="post" style="display: inline;">
                 <input type="hidden" name="selectedDeployments" id="globalRestoreDeployments">
-                <button type="submit" class="btn btn-success">
+                <button type="submit" class="btn btn-success" id="globalBatchRestoreBtn" disabled>
                     ↩️ Восстановить выбранное
                 </button>
             </form>
+            <form th:action="@{'/groups/' + ${group.id} + '/update-original-state-all'}" method="post" style="display: inline;">
+                <button type="submit" class="btn btn-primary">💾 Обновить стартовые значения (все)</button>
+            </form>
+            <button type="button" class="btn btn-primary" onclick="saveAllScalingsInGroup()" style="background: #4caf50;" id="saveAllScalingsBtn" th:data-group-id="${group.id}" disabled>
+                💾 Сохранить все
+            </button>
+        </div>
+
+        <!-- Поисковая строка для группы -->
+        <div style="background: white; border: 1px solid #ddd; border-radius: 4px; padding: 16px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <input type="text" 
+                   id="groupDeploymentSearch" 
+                   placeholder="Поиск по названию deployment во всех подключениях..." 
+                   style="width: 100%; padding: 10px 16px; font-size: 14px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;"
+                   oninput="filterDeploymentsInGroup()">
         </div>
 
         <!-- Столбцы подключений -->
@@ -490,18 +497,13 @@
                             <strong>URL:</strong>
                             <span th:text="${connWithDepl.connection.masterUrl}">URL</span>
                         </div>
+                        <div th:if="${connWithDepl.lastUpdateDate != null}" style="margin-top: 12px; font-size: 35px; font-weight: 600; color: #333; text-align: center; padding: 12px 0; background: #f8f9fa; border-radius: 4px; border: 1px solid #e0e0e0;">
+                            Последнее обновление стартовых значений: 
+                            <span style="color: #2196f3; font-weight: 700;" th:text="${#temporals.format(connWithDepl.lastUpdateDate, 'HH:mm:ss dd.MM.yyyy')}"></span>
+                        </div>
                     </div>
                     <!-- Индивидуальные кнопки для каждого проекта -->
                     <div class="connection-actions" style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
-                        <form th:action="@{'/groups/' + ${group.id} + '/connections/' + ${connWithDepl.connection.id} + '/shutdown-all'}" method="post">
-                            <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">🛑 Потушить все</button>
-                        </form>
-                        <form th:action="@{'/groups/' + ${group.id} + '/connections/' + ${connWithDepl.connection.id} + '/restart-all'}" method="post">
-                            <button type="submit" class="btn btn-warning" style="padding: 6px 12px; font-size: 12px;">🔄 Рестартнуть все</button>
-                        </form>
-                        <form th:action="@{'/groups/' + ${group.id} + '/connections/' + ${connWithDepl.connection.id} + '/restore'}" method="post">
-                            <button type="submit" class="btn btn-success" style="padding: 6px 12px; font-size: 12px;">↩️ Восстановить</button>
-                        </form>
                         <form th:action="@{'/groups/' + ${group.id} + '/connections/' + ${connWithDepl.connection.id} + '/update-original-state'}" method="post">
                             <button type="submit" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;">💾 Обновить стартовые значения</button>
                         </form>
@@ -613,36 +615,42 @@
             // Собираем все выбранные deployments из всех подключений
             const allChecked = document.querySelectorAll('.deployment-select:checked');
             const selectedCount = allChecked.length;
-            const globalBatchActions = document.getElementById('globalBatchActions');
             const globalSelectedCount = document.getElementById('globalSelectedCount');
+            const globalBatchShutdownBtn = document.getElementById('globalBatchShutdownBtn');
+            const globalBatchRestartBtn = document.getElementById('globalBatchRestartBtn');
+            const globalBatchRestoreBtn = document.getElementById('globalBatchRestoreBtn');
             
             if (globalSelectedCount) {
                 globalSelectedCount.textContent = selectedCount;
             }
             
-            if (globalBatchActions) {
-                if (selectedCount > 0) {
-                    globalBatchActions.classList.remove('hidden');
-                    
-                    // Формируем данные в формате connectionId|namespace|deploymentName
-                    const selectedDeployments = Array.from(allChecked).map(cb => {
-                        const connectionId = cb.getAttribute('data-connection-id');
-                        const namespace = cb.getAttribute('data-namespace');
-                        const deploymentName = cb.value;
-                        return connectionId + '|' + namespace + '|' + deploymentName;
-                    });
-                    
-                    // Обновляем скрытые поля форм
-                    const shutdownInput = document.getElementById('globalShutdownDeployments');
-                    const restartInput = document.getElementById('globalRestartDeployments');
-                    const restoreInput = document.getElementById('globalRestoreDeployments');
-                    
-                    if (shutdownInput) shutdownInput.value = selectedDeployments.join(',');
-                    if (restartInput) restartInput.value = selectedDeployments.join(',');
-                    if (restoreInput) restoreInput.value = selectedDeployments.join(',');
-                } else {
-                    globalBatchActions.classList.add('hidden');
-                }
+            if (selectedCount > 0) {
+                // Формируем данные в формате connectionId|namespace|deploymentName
+                const selectedDeployments = Array.from(allChecked).map(cb => {
+                    const connectionId = cb.getAttribute('data-connection-id');
+                    const namespace = cb.getAttribute('data-namespace');
+                    const deploymentName = cb.value;
+                    return connectionId + '|' + namespace + '|' + deploymentName;
+                });
+                
+                // Обновляем скрытые поля форм
+                const shutdownInput = document.getElementById('globalShutdownDeployments');
+                const restartInput = document.getElementById('globalRestartDeployments');
+                const restoreInput = document.getElementById('globalRestoreDeployments');
+                
+                if (shutdownInput) shutdownInput.value = selectedDeployments.join(',');
+                if (restartInput) restartInput.value = selectedDeployments.join(',');
+                if (restoreInput) restoreInput.value = selectedDeployments.join(',');
+                
+                // Активируем кнопки
+                if (globalBatchShutdownBtn) globalBatchShutdownBtn.disabled = false;
+                if (globalBatchRestartBtn) globalBatchRestartBtn.disabled = false;
+                if (globalBatchRestoreBtn) globalBatchRestoreBtn.disabled = false;
+            } else {
+                // Деактивируем кнопки
+                if (globalBatchShutdownBtn) globalBatchShutdownBtn.disabled = true;
+                if (globalBatchRestartBtn) globalBatchRestartBtn.disabled = true;
+                if (globalBatchRestoreBtn) globalBatchRestoreBtn.disabled = true;
             }
             
             // Обновляем состояние "Выбрать все" для каждого подключения
@@ -738,16 +746,17 @@
             updateSaveAllButtonInGroup();
         }
 
-        // Обновление видимости кнопки "Сохранить все" в группе
+        // Обновление видимости и активности кнопки "Сохранить все" в группе
         function updateSaveAllButtonInGroup() {
             const changedInputs = document.querySelectorAll('.scale-input-small.changed');
             const saveAllBtn = document.getElementById('saveAllScalingsBtn');
             if (saveAllBtn) {
                 if (changedInputs.length > 0) {
-                    saveAllBtn.style.display = 'inline-block';
+                    saveAllBtn.disabled = false;
                     saveAllBtn.textContent = '💾 Сохранить все (' + changedInputs.length + ')';
                 } else {
-                    saveAllBtn.style.display = 'none';
+                    saveAllBtn.disabled = true;
+                    saveAllBtn.textContent = '💾 Сохранить все';
                 }
             }
         }
@@ -779,8 +788,14 @@
                 return;
             }
 
-            // Получаем groupId из Thymeleaf
-            const groupId = /*[[${group.id}]]*/ null;
+            // Получаем groupId из data-атрибута кнопки
+            const saveAllBtn = document.getElementById('saveAllScalingsBtn');
+            if (!saveAllBtn) {
+                alert('Ошибка: кнопка "Сохранить все" не найдена');
+                return;
+            }
+            
+            const groupId = saveAllBtn.getAttribute('data-group-id');
             
             if (!groupId) {
                 alert('Ошибка: не найден ID группы');
@@ -802,6 +817,28 @@
 
             document.body.appendChild(form);
             form.submit();
+        }
+
+        // Фильтрация deployments по названию в группе
+        function filterDeploymentsInGroup() {
+            const searchInput = document.getElementById('groupDeploymentSearch');
+            const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const deploymentRows = document.querySelectorAll('.deployment-row');
+            
+            deploymentRows.forEach(row => {
+                const deploymentNameElement = row.querySelector('.deployment-name');
+                if (deploymentNameElement) {
+                    const deploymentName = deploymentNameElement.textContent.toLowerCase().trim();
+                    if (deploymentName.includes(searchTerm)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Обновляем состояние "Выбрать все" после фильтрации
+            updateGlobalBatchActions();
         }
 
         // Инициализация при загрузке страницы для группы

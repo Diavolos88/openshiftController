@@ -6,6 +6,7 @@ import com.openshift.controller.entity.OpenShiftConnection;
 import com.openshift.controller.service.ConnectionGroupService;
 import com.openshift.controller.service.ConnectionService;
 import com.openshift.controller.service.DeploymentService;
+import com.openshift.controller.service.StateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -30,6 +31,7 @@ public class GroupWebController {
     private final ConnectionGroupService groupService;
     private final ConnectionService connectionService;
     private final DeploymentService deploymentService;
+    private final StateService stateService;
 
     /**
      * Страница просмотра группы с подключениями и их deployments
@@ -65,11 +67,15 @@ public class GroupWebController {
                                 conn.getId(), namespace);
                     }
                     
-                    connectionsWithDeployments.add(new ConnectionWithDeployments(conn, namespace, deployments, null));
+                    // Получаем дату последнего обновления стартовых значений
+                    java.time.LocalDateTime lastUpdateDate = stateService.getLastUpdateDate(conn.getId(), namespace);
+                    connectionsWithDeployments.add(new ConnectionWithDeployments(conn, namespace, deployments, null, lastUpdateDate));
                 } catch (Exception e) {
                     log.error("Ошибка при получении deployments для подключения {} (ID: {})", conn.getName(), conn.getId(), e);
+                    java.time.LocalDateTime lastUpdateDate = stateService.getLastUpdateDate(conn.getId(), 
+                            conn.getNamespace() != null ? conn.getNamespace() : "default");
                     connectionsWithDeployments.add(new ConnectionWithDeployments(conn, conn.getNamespace(), List.of(), 
-                            "Ошибка: " + e.getMessage()));
+                            "Ошибка: " + e.getMessage(), lastUpdateDate));
                 }
             }
             
@@ -582,13 +588,16 @@ public class GroupWebController {
         private final String namespace;
         private final List<DeploymentInfo> deployments;
         private final String error;
+        private final java.time.LocalDateTime lastUpdateDate;
 
         public ConnectionWithDeployments(OpenShiftConnection connection, String namespace, 
-                                        List<DeploymentInfo> deployments, String error) {
+                                        List<DeploymentInfo> deployments, String error, 
+                                        java.time.LocalDateTime lastUpdateDate) {
             this.connection = connection;
             this.namespace = namespace;
             this.deployments = deployments;
             this.error = error;
+            this.lastUpdateDate = lastUpdateDate;
         }
 
         public OpenShiftConnection getConnection() {
@@ -605,6 +614,10 @@ public class GroupWebController {
 
         public String getError() {
             return error;
+        }
+
+        public java.time.LocalDateTime getLastUpdateDate() {
+            return lastUpdateDate;
         }
     }
 }

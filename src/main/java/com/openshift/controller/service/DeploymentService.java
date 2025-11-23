@@ -322,9 +322,6 @@ public class DeploymentService {
     public Map<String, Boolean> shutdownAllDeployments(Long connectionId, String namespace) {
         log.info("Остановка всех Deployments в namespace: {} для подключения ID: {}", namespace, connectionId);
         
-        // Сохраняем текущее состояние перед остановкой
-        saveCurrentState(connectionId, namespace);
-        
         List<DeploymentInfo> deployments = getAllDeployments(connectionId, namespace);
         return deployments.stream()
                 .collect(Collectors.toMap(
@@ -647,8 +644,6 @@ public class DeploymentService {
     public Map<String, Boolean> shutdownSelectedDeployments(Long connectionId, String namespace, List<String> deploymentNames) {
         log.info("Массовая остановка {} deployments в namespace: {} для подключения ID: {}", 
                 deploymentNames.size(), namespace, connectionId);
-        // Сохраняем состояние перед остановкой
-        saveCurrentState(connectionId, namespace);
         return deploymentNames.stream()
                 .collect(Collectors.toMap(
                         name -> name,

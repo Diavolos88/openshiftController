@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +96,15 @@ public class StateService {
         return repository
                 .findByConnectionIdAndNamespaceAndDeploymentName(connectionId, namespace, deploymentName)
                 .map(DeploymentState::getOriginalReplicas)
+                .orElse(null);
+    }
+
+    /**
+     * Получить дату последнего обновления стартовых значений для namespace подключения
+     */
+    public LocalDateTime getLastUpdateDate(Long connectionId, String namespace) {
+        return repository
+                .findMaxUpdatedAtByConnectionIdAndNamespace(connectionId, namespace)
                 .orElse(null);
     }
 
