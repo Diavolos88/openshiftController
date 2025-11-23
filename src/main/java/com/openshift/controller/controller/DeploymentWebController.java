@@ -6,6 +6,7 @@ import com.openshift.controller.entity.OpenShiftConnection;
 import com.openshift.controller.service.ConnectionGroupService;
 import com.openshift.controller.service.ConnectionService;
 import com.openshift.controller.service.DeploymentService;
+import com.openshift.controller.service.PodService;
 import com.openshift.controller.service.StateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ public class DeploymentWebController {
     private final ConnectionService connectionService;
     private final ConnectionGroupService connectionGroupService;
     private final StateService stateService;
+    private final PodService podService;
 
     /**
      * Главная страница - список всех групп с подключениями
@@ -561,6 +563,37 @@ public class DeploymentWebController {
     }
 
     /**
+     * Замерить время старта пода для конкретного Deployment (с connectionId)
+     */
+    @PostMapping("/deployments/{connectionId}/{namespace}/{name}/measure-startup")
+    public String measurePodStartupTime(
+            @PathVariable Long connectionId,
+            @PathVariable String namespace,
+            @PathVariable String name,
+            @RequestParam(required = false) Long groupId,
+            RedirectAttributes redirectAttributes) {
+        try {
+            Long startupTime = podService.measurePodStartupTime(connectionId, namespace, name);
+            if (startupTime != null) {
+                redirectAttributes.addFlashAttribute("success", 
+                    "Время старта пода для Deployment " + name + ": " + startupTime + " секунд");
+            } else {
+                redirectAttributes.addFlashAttribute("error", 
+                    "Не удалось замерить время старта пода для Deployment " + name);
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при замере времени старта пода для Deployment", e);
+            redirectAttributes.addFlashAttribute("error", 
+                "Ошибка при замере времени старта: " + e.getMessage());
+        }
+        
+        if (groupId != null) {
+            return "redirect:/groups/" + groupId;
+        }
+        return "redirect:/deployments/" + connectionId + "/" + namespace;
+    }
+
+    /**
      * Восстановить поды для конкретного Deployment (для обратной совместимости)
      */
     @PostMapping("/deployments/{namespace}/{name}/pods/restore")
@@ -587,6 +620,42 @@ public class DeploymentWebController {
                     return "redirect:/deployments/" + namespace;
                 })
                 .orElse("redirect:/connection/setup");
+    }
+
+    /**
+     * Замерить время старта подов для выбранных Deployments
+     */
+    @PostMapping("/deployments/{connectionId}/{namespace}/batch/measure-startup")
+    public String measureStartupTimeForSelected(
+            @PathVariable Long connectionId,
+            @PathVariable String namespace,
+            @RequestParam List<String> deploymentNames,
+            @RequestParam(required = false) Long groupId,
+            RedirectAttributes redirectAttributes) {
+        try {
+            Map<String, Long> results = podService.measurePodStartupTimeForDeployments(
+                    connectionId, namespace, deploymentNames);
+            
+            StringBuilder message = new StringBuilder("Время старта подов измерено: ");
+            results.forEach((name, time) -> {
+                if (time != null) {
+                    message.append(name).append(": ").append(time).append(" сек; ");
+                } else {
+                    message.append(name).append(": не удалось замерить; ");
+                }
+            });
+            
+            redirectAttributes.addFlashAttribute("success", message.toString());
+        } catch (Exception e) {
+            log.error("Ошибка при замере времени старта подов для выбранных deployments", e);
+            redirectAttributes.addFlashAttribute("error", 
+                "Ошибка при замере времени старта: " + e.getMessage());
+        }
+        
+        if (groupId != null) {
+            return "redirect:/groups/" + groupId;
+        }
+        return "redirect:/deployments/" + connectionId + "/" + namespace;
     }
 
     /**

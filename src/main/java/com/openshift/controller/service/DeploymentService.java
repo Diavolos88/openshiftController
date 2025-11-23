@@ -27,6 +27,7 @@ public class DeploymentService {
     private final ConnectionService connectionService;
     private final StateService stateService;
     private final MockDataService mockDataService;
+    private final PodStartupTimeService podStartupTimeService;
     
     /**
      * Проверить, является ли подключение mock-заглушкой
@@ -104,7 +105,7 @@ public class DeploymentService {
                     .map(this::mapToDeploymentInfo)
                     .collect(Collectors.toList());
             
-            // Добавляем изначальное количество реплик из StateService
+            // Добавляем изначальное количество реплик из StateService и время старта
             deployments.forEach(deployment -> {
                 Integer originalReplicas = stateService.getOriginalReplicas(
                         connectionId,
@@ -117,6 +118,10 @@ public class DeploymentService {
                     // Если нет сохраненного состояния, используем текущее как изначальное для отображения
                     deployment.setOriginalReplicas(deployment.getCurrentReplicas());
                 }
+                
+                // Добавляем время старта пода
+                podStartupTimeService.getStartupTime(connectionId, deployment.getNamespace(), deployment.getName())
+                        .ifPresent(deployment::setStartupTimeSeconds);
             });
             
             return deployments;
@@ -459,6 +464,117 @@ public class DeploymentService {
     public boolean restartAllPodsForDeployment(Long connectionId, String namespace, String deploymentName) {
         log.info("Перезапуск всех подов для Deployment {}/{} для подключения ID: {}", namespace, deploymentName, connectionId);
         return restartByDeletingPods(connectionId, namespace, deploymentName);
+    }
+
+    /**
+     * Замерить время старта пода для deployment
+     * Удаляет один под и отслеживает время до поднятия нового пода
+     */
+    public Long measurePodStartupTime(Long connectionId, String namespace, String deploymentName) {
+        log.info("Замер времени старта пода для Deployment {}/{} для подключения ID: {}", namespace, deploymentName, connectionId);
+        
+        // Для mock-подключений возвращаем фиктивное время
+        if (isMockConnection(connectionId)) {
+            log.info("Mock-режим: возвращаем фиктивное время старта для deployment {}/{}", namespace, deploymentName);
+            long mockTime = 5L; // 5 секунд для mock
+            podStartupTimeService.saveStartupTime(connectionId, namespace, deploymentName, mockTime);
+            return mockTime;
+        }
+        
+        OpenShiftClient openShiftClient = getClient(connectionId);
+        
+        try {
+            // Получаем deployment для правильного label selector
+            Deployment deployment = openShiftClient.apps().deployments()
+                    .inNamespace(namespace)
+                    .withName(deploymentName)
+                    .get();
+            
+            if (deployment == null) {
+                throw new RuntimeException("Deployment " + deploymentName + " не найден");
+            }
+            
+            // Используем labels из Deployment для поиска подов
+            Map<String, String> labels = deployment.getSpec().getSelector().getMatchLabels();
+            if (labels == null || labels.isEmpty()) {
+                // Fallback на стандартный label
+                labels = Map.of("app", deploymentName);
+            }
+            
+            // Получаем поды для deployment
+            io.fabric8.kubernetes.api.model.PodList podList = openShiftClient.pods()
+                    .inNamespace(namespace)
+                    .withLabels(labels)
+                    .list();
+            
+            if (podList.getItems().isEmpty()) {
+                throw new RuntimeException("Не найдены поды для deployment " + deploymentName);
+            }
+            
+            // Удаляем первый под
+            io.fabric8.kubernetes.api.model.Pod podToDelete = podList.getItems().get(0);
+            String podName = podToDelete.getMetadata().getName();
+            log.info("Удаление пода {} для замера времени старта", podName);
+            
+            long startTime = System.currentTimeMillis();
+            openShiftClient.pods()
+                    .inNamespace(namespace)
+                    .withName(podName)
+                    .delete();
+            
+            // Ждем появления нового пода и его готовности
+            int maxWaitTime = 300; // максимум 5 минут
+            int checkInterval = 2; // проверяем каждые 2 секунды
+            int waited = 0;
+            
+            while (waited < maxWaitTime) {
+                Thread.sleep(checkInterval * 1000);
+                waited += checkInterval;
+                
+                // Проверяем поды deployment
+                io.fabric8.kubernetes.api.model.PodList currentPods = openShiftClient.pods()
+                        .inNamespace(namespace)
+                        .withLabels(labels)
+                        .list();
+                
+                // Ищем новый под (не тот, что удалили)
+                for (io.fabric8.kubernetes.api.model.Pod pod : currentPods.getItems()) {
+                    String currentPodName = pod.getMetadata().getName();
+                    if (!currentPodName.equals(podName)) {
+                        // Проверяем, готов ли под
+                        String phase = pod.getStatus().getPhase();
+                        if ("Running".equals(phase)) {
+                            // Проверяем готовность через условия
+                            if (pod.getStatus().getConditions() != null) {
+                                boolean ready = pod.getStatus().getConditions().stream()
+                                        .anyMatch(condition -> "Ready".equals(condition.getType()) 
+                                                && "True".equals(condition.getStatus()));
+                                if (ready) {
+                                    long endTime = System.currentTimeMillis();
+                                    long startupTimeSeconds = (endTime - startTime) / 1000;
+                                    
+                                    log.info("Под {} готов. Время старта: {} секунд", currentPodName, startupTimeSeconds);
+                                    
+                                    // Сохраняем время в БД
+                                    podStartupTimeService.saveStartupTime(connectionId, namespace, deploymentName, startupTimeSeconds);
+                                    
+                                    return startupTimeSeconds;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            throw new RuntimeException("Превышено время ожидания готовности пода (5 минут)");
+            
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Замер времени старта прерван", e);
+        } catch (Exception e) {
+            log.error("Ошибка при замере времени старта пода для deployment {}/{}", namespace, deploymentName, e);
+            throw new RuntimeException("Ошибка при замере времени старта: " + e.getMessage(), e);
+        }
     }
 
     /**

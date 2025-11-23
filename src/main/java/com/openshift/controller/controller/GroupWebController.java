@@ -6,6 +6,7 @@ import com.openshift.controller.entity.OpenShiftConnection;
 import com.openshift.controller.service.ConnectionGroupService;
 import com.openshift.controller.service.ConnectionService;
 import com.openshift.controller.service.DeploymentService;
+import com.openshift.controller.service.PodService;
 import com.openshift.controller.service.StateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ public class GroupWebController {
     private final ConnectionGroupService groupService;
     private final ConnectionService connectionService;
     private final DeploymentService deploymentService;
+    private final PodService podService;
     private final StateService stateService;
 
     /**
@@ -530,6 +532,91 @@ public class GroupWebController {
             log.error("Ошибка при массовом восстановлении deployments в группе", e);
             redirectAttributes.addFlashAttribute("error", 
                 "Ошибка при восстановлении: " + e.getMessage());
+        }
+        return "redirect:/groups/" + groupId;
+    }
+
+    /**
+     * Массовый замер времени старта подов для выбранных Deployments для всех подключений в группе
+     * Формат selectedDeployments: "connectionId|namespace|deploymentName,connectionId|namespace|deploymentName,..."
+     */
+    @PostMapping("/{groupId}/batch/measure-startup")
+    public String measureStartupTimeForSelected(
+            @PathVariable Long groupId,
+            @RequestParam(required = false) List<String> selectedDeployments,
+            RedirectAttributes redirectAttributes) {
+        try {
+            if (selectedDeployments == null || selectedDeployments.isEmpty()) {
+                redirectAttributes.addFlashAttribute("error", "Не выбраны deployments для замера времени старта");
+            } else {
+                Map<String, Long> allResults = new HashMap<>();
+                int totalProcessed = 0;
+                
+                // Группируем deployments по connectionId и namespace для более эффективной обработки
+                Map<String, List<String>> deploymentsByConnection = new HashMap<>();
+                
+                for (String deploymentData : selectedDeployments) {
+                    String[] parts = deploymentData.split("\\|");
+                    if (parts.length == 3) {
+                        try {
+                            Long connectionId = Long.parseLong(parts[0]);
+                            String namespace = parts[1];
+                            String deploymentName = parts[2];
+                            
+                            String key = connectionId + "|" + namespace;
+                            deploymentsByConnection.computeIfAbsent(key, k -> new ArrayList<>()).add(deploymentName);
+                        } catch (Exception e) {
+                            log.error("Ошибка при обработке deployment: {}", deploymentData, e);
+                        }
+                    }
+                }
+                
+                // Обрабатываем каждое подключение
+                for (Map.Entry<String, List<String>> entry : deploymentsByConnection.entrySet()) {
+                    String[] keyParts = entry.getKey().split("\\|");
+                    if (keyParts.length == 2) {
+                        try {
+                            Long connectionId = Long.parseLong(keyParts[0]);
+                            String namespace = keyParts[1];
+                            List<String> deploymentNames = entry.getValue();
+                            
+                            Map<String, Long> results = podService.measurePodStartupTimeForDeployments(
+                                    connectionId, namespace, deploymentNames);
+                            allResults.putAll(results);
+                            totalProcessed += deploymentNames.size();
+                        } catch (Exception e) {
+                            log.error("Ошибка при обработке deployments для подключения: {}", entry.getKey(), e);
+                        }
+                    }
+                }
+                
+                long successCount = allResults.values().stream().filter(t -> t != null).count();
+                StringBuilder message = new StringBuilder("Время старта подов измерено: ");
+                message.append(successCount).append(" из ").append(totalProcessed).append(" deployments. ");
+                
+                // Добавляем детали по первым нескольким результатам
+                int detailCount = 0;
+                for (Map.Entry<String, Long> result : allResults.entrySet()) {
+                    if (detailCount < 5) {
+                        if (result.getValue() != null) {
+                            message.append(result.getKey()).append(": ").append(result.getValue()).append(" сек; ");
+                        } else {
+                            message.append(result.getKey()).append(": не удалось; ");
+                        }
+                        detailCount++;
+                    }
+                }
+                
+                if (totalProcessed > 5) {
+                    message.append("...");
+                }
+                
+                redirectAttributes.addFlashAttribute("success", message.toString());
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при массовом замере времени старта подов в группе", e);
+            redirectAttributes.addFlashAttribute("error", 
+                "Ошибка при замере времени старта: " + e.getMessage());
         }
         return "redirect:/groups/" + groupId;
     }

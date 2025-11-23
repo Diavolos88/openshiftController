@@ -462,6 +462,12 @@
                     ↩️ Восстановить выбранное
                 </button>
             </form>
+            <form id="globalBatchMeasureForm" th:action="@{'/groups/' + ${group.id} + '/batch/measure-startup'}" method="post" style="display: inline;">
+                <input type="hidden" name="selectedDeployments" id="globalMeasureDeployments">
+                <button type="submit" class="btn" id="globalBatchMeasureBtn" disabled style="background: #9c27b0; color: white;">
+                    ⏱️ Замерить времена выбранных под
+                </button>
+            </form>
             <form th:action="@{'/groups/' + ${group.id} + '/update-original-state-all'}" method="post" style="display: inline;">
                 <button type="submit" class="btn btn-primary">💾 Обновить стартовые значения (все)</button>
             </form>
@@ -524,7 +530,8 @@
                             <div class="deployment-name">Имя</div>
                             <div class="deployment-info" style="gap: 8px;">Текущие / Стартовое / Готовые</div>
                             <div class="scale-form" style="min-width: 100px;">Изменить</div>
-                            <div class="deployment-actions" style="min-width: 120px;">Действия</div>
+                            <div class="deployment-startup" style="min-width: 80px; text-align: center;">Время старта</div>
+                            <div class="deployment-actions" style="min-width: 150px;">Действия</div>
                         </div>
                         <div th:each="deployment : ${connWithDepl.deployments}" class="deployment-row">
                             <div style="min-width: 18px;">
@@ -571,6 +578,16 @@
                                     <button type="submit" class="btn-save">OK</button>
                                 </form>
                             </div>
+                            <div class="deployment-startup" style="min-width: 80px; text-align: center;">
+                                <span th:if="${deployment.startupTimeSeconds != null}" 
+                                      style="font-weight: 600; color: #2196f3; font-size: 12px;">
+                                    <span th:text="${deployment.startupTimeSeconds}"></span> сек
+                                </span>
+                                <span th:if="${deployment.startupTimeSeconds == null}" 
+                                      style="color: #999; font-size: 12px;">
+                                    —
+                                </span>
+                            </div>
                             <div class="deployment-actions">
                                 <form th:action="@{'/deployments/' + ${connWithDepl.connection.id} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/delete'}" method="post">
                                     <input type="hidden" name="groupId" th:value="${group.id}">
@@ -583,6 +600,10 @@
                                 <form th:action="@{'/deployments/' + ${connWithDepl.connection.id} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/restore'}" method="post">
                                     <input type="hidden" name="groupId" th:value="${group.id}">
                                     <button type="submit" class="btn-action btn-restore" title="Восстановить поды">↩️</button>
+                                </form>
+                                <form th:action="@{'/deployments/' + ${connWithDepl.connection.id} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/measure-startup'}" method="post">
+                                    <input type="hidden" name="groupId" th:value="${group.id}">
+                                    <button type="submit" class="btn-action" style="background: #9c27b0; color: white;" title="Замерить время старта пода" onclick="return confirm('Это удалит один под и замерит время его старта. Продолжить?')">⏱️</button>
                                 </form>
                             </div>
                         </div>
@@ -619,6 +640,7 @@
             const globalBatchShutdownBtn = document.getElementById('globalBatchShutdownBtn');
             const globalBatchRestartBtn = document.getElementById('globalBatchRestartBtn');
             const globalBatchRestoreBtn = document.getElementById('globalBatchRestoreBtn');
+            const globalBatchMeasureBtn = document.getElementById('globalBatchMeasureBtn');
             
             if (globalSelectedCount) {
                 globalSelectedCount.textContent = selectedCount;
@@ -637,20 +659,24 @@
                 const shutdownInput = document.getElementById('globalShutdownDeployments');
                 const restartInput = document.getElementById('globalRestartDeployments');
                 const restoreInput = document.getElementById('globalRestoreDeployments');
+                const measureInput = document.getElementById('globalMeasureDeployments');
                 
                 if (shutdownInput) shutdownInput.value = selectedDeployments.join(',');
                 if (restartInput) restartInput.value = selectedDeployments.join(',');
                 if (restoreInput) restoreInput.value = selectedDeployments.join(',');
+                if (measureInput) measureInput.value = selectedDeployments.join(',');
                 
                 // Активируем кнопки
                 if (globalBatchShutdownBtn) globalBatchShutdownBtn.disabled = false;
                 if (globalBatchRestartBtn) globalBatchRestartBtn.disabled = false;
                 if (globalBatchRestoreBtn) globalBatchRestoreBtn.disabled = false;
+                if (globalBatchMeasureBtn) globalBatchMeasureBtn.disabled = false;
             } else {
                 // Деактивируем кнопки
                 if (globalBatchShutdownBtn) globalBatchShutdownBtn.disabled = true;
                 if (globalBatchRestartBtn) globalBatchRestartBtn.disabled = true;
                 if (globalBatchRestoreBtn) globalBatchRestoreBtn.disabled = true;
+                if (globalBatchMeasureBtn) globalBatchMeasureBtn.disabled = true;
             }
             
             // Обновляем состояние "Выбрать все" для каждого подключения
@@ -675,6 +701,7 @@
             const globalShutdownForm = document.getElementById('globalBatchShutdownForm');
             const globalRestartForm = document.getElementById('globalBatchRestartForm');
             const globalRestoreForm = document.getElementById('globalBatchRestoreForm');
+            const globalMeasureForm = document.getElementById('globalBatchMeasureForm');
 
             if (globalShutdownForm) {
                 globalShutdownForm.addEventListener('submit', function(e) {
@@ -730,6 +757,40 @@
                     const oldInput = document.getElementById('globalRestoreDeployments');
                     oldInput.remove();
                     deployments.forEach(deployment => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'selectedDeployments';
+                        input.value = deployment.trim();
+                        this.appendChild(input);
+                    });
+                });
+            }
+
+            if (globalMeasureForm) {
+                globalMeasureForm.addEventListener('submit', function(e) {
+                    // Собираем выбранные чекбоксы прямо перед отправкой
+                    const allChecked = document.querySelectorAll('.deployment-select:checked');
+                    const selectedDeployments = Array.from(allChecked).map(cb => {
+                        const connectionId = cb.getAttribute('data-connection-id');
+                        const namespace = cb.getAttribute('data-namespace');
+                        const deploymentName = cb.value;
+                        return connectionId + '|' + namespace + '|' + deploymentName;
+                    }).filter(deployment => deployment && deployment.trim().length > 0);
+                    
+                    if (selectedDeployments.length === 0) {
+                        e.preventDefault();
+                        alert('Не выбраны deployments для замера времени');
+                        return false;
+                    }
+                    
+                    // Удаляем старое скрытое поле
+                    const oldInput = document.getElementById('globalMeasureDeployments');
+                    if (oldInput) {
+                        oldInput.remove();
+                    }
+                    
+                    // Создаем новые скрытые поля для каждого deployment
+                    selectedDeployments.forEach(deployment => {
                         const input = document.createElement('input');
                         input.type = 'hidden';
                         input.name = 'selectedDeployments';

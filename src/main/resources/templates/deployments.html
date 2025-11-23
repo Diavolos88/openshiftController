@@ -447,6 +447,12 @@
                     ↩️ Восстановить выбранное
                 </button>
             </form>
+            <form id="batchMeasureForm" th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/batch/measure-startup'}" method="post" style="display: inline;">
+                <input type="hidden" name="deploymentNames" id="measureDeploymentNames">
+                <button type="submit" class="btn" id="batchMeasureBtn" disabled style="background: #9c27b0; color: white;">
+                    ⏱️ Замерить времена выбранных под
+                </button>
+            </form>
             <form th:action="@{'/deployments/' + ${connectionId} + '/' + ${namespace} + '/update-original-state'}" method="post" style="display: inline;">
                 <button type="submit" class="btn btn-primary">💾 Обновить стартовые значения</button>
             </form>
@@ -482,15 +488,17 @@
                     <div class="deployment-header-original">Стартовое</div>
                     <div class="deployment-header-ready">Готовые</div>
                     <div class="deployment-header-scale">Изменить</div>
+                    <div class="deployment-header-startup" style="min-width: 100px;">Время старта</div>
                     <div class="deployment-header-actions" style="min-width: 350px;">Действия</div>
                 </div>
                 <div class="deployments-list">
-                <div th:each="deployment : ${deployments}" class="deployment-row">
-                    <div class="deployment-header-checkbox">
-                        <input type="checkbox" class="deployment-checkbox deployment-select" 
-                               th:value="${deployment.name}" 
-                               onchange="updateBatchActions()">
-                    </div>
+                 <div th:each="deployment : ${deployments}" class="deployment-row">
+                     <div class="deployment-header-checkbox">
+                         <input type="checkbox" class="deployment-checkbox deployment-select" 
+                                th:value="${deployment.name}" 
+                                th:name="'deployment-' + ${deployment.name}"
+                                onchange="updateBatchActions()">
+                     </div>
                     <div class="deployment-name" th:text="${deployment.name}">Deployment Name</div>
                     <div class="deployment-current" th:text="${deployment.currentReplicas}">0</div>
                     <div class="deployment-original" th:text="${deployment.originalReplicas ?: deployment.currentReplicas}">0</div>
@@ -515,6 +523,16 @@
                             <button type="submit" class="btn-save">Сохранить</button>
                         </form>
                     </div>
+                    <div class="deployment-startup" style="min-width: 100px; text-align: center;">
+                        <span th:if="${deployment.startupTimeSeconds != null}" 
+                              style="font-weight: 600; color: #2196f3;">
+                            <span th:text="${deployment.startupTimeSeconds}"></span> сек
+                        </span>
+                        <span th:if="${deployment.startupTimeSeconds == null}" 
+                              style="color: #999;">
+                            —
+                        </span>
+                    </div>
                     <div class="deployment-actions">
                         <form th:if="${connectionId != null}" th:action="@{'/deployments/' + ${connectionId} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/delete'}" method="post">
                             <button type="submit" class="btn-pod-action btn-pod-delete" title="Остановить (реплики в 0)">🗑️</button>
@@ -524,6 +542,9 @@
                         </form>
                         <form th:if="${connectionId != null}" th:action="@{'/deployments/' + ${connectionId} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/pods/restore'}" method="post">
                             <button type="submit" class="btn-pod-action btn-pod-restore" title="Восстановить поды">↩️</button>
+                        </form>
+                        <form th:if="${connectionId != null}" th:action="@{'/deployments/' + ${connectionId} + '/' + ${deployment.namespace} + '/' + ${deployment.name} + '/measure-startup'}" method="post">
+                            <button type="submit" class="btn-pod-action" style="background: #9c27b0; color: white;" title="Замерить время старта пода" onclick="return confirm('Это удалит один под и замерит время его старта. Продолжить?')">⏱️</button>
                         </form>
                     </div>
                 </div>
@@ -538,127 +559,104 @@
     </div>
 
     <script>
+        // Логика чекбоксов - по аналогии с группами
+        
         function toggleSelectAllDeployments() {
             const selectAll = document.getElementById('selectAllDeployments');
-            const checkboxes = document.querySelectorAll('.deployment-select');
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = selectAll.checked;
+            if (!selectAll) return;
+            
+            // Получаем все чекбоксы deployments (только видимые)
+            const allRows = document.querySelectorAll('.deployment-row');
+            allRows.forEach(function(row) {
+                if (row.style.display === 'none') return; // пропускаем скрытые
+                const checkbox = row.querySelector('.deployment-select');
+                if (checkbox) {
+                    checkbox.checked = selectAll.checked;
+                }
             });
             updateBatchActions();
         }
 
         function updateBatchActions() {
-            const checkboxes = document.querySelectorAll('.deployment-select:checked');
-            const selectedCount = checkboxes.length;
-            const selectedCountSpan = document.getElementById('selectedCount');
+            // Простой подход - как в группах: просто ищем все отмеченные чекбоксы
+            const allChecked = document.querySelectorAll('.deployment-select:checked');
+            const selectedCount = allChecked.length;
             
+            // Обновляем счетчик
+            const selectedCountSpan = document.getElementById('selectedCount');
             if (selectedCountSpan) {
                 selectedCountSpan.textContent = selectedCount;
             }
             
-            // Обновляем активность кнопок массовых операций
+            // Получаем кнопки
             const batchShutdownBtn = document.getElementById('batchShutdownBtn');
             const batchRestartBtn = document.getElementById('batchRestartBtn');
             const batchRestoreBtn = document.getElementById('batchRestoreBtn');
+            const batchMeasureBtn = document.getElementById('batchMeasureBtn');
             
             if (selectedCount > 0) {
+                // Формируем данные - просто имена deployments
+                const deploymentNames = Array.from(allChecked).map(function(cb) {
+                    return cb.value;
+                });
+                
                 // Обновляем скрытые поля форм
-                const deploymentNames = Array.from(checkboxes).map(cb => cb.value);
-                if (document.getElementById('shutdownDeploymentNames')) {
-                    document.getElementById('shutdownDeploymentNames').value = deploymentNames.join(',');
-                }
-                if (document.getElementById('restartDeploymentNames')) {
-                    document.getElementById('restartDeploymentNames').value = deploymentNames.join(',');
-                }
-                if (document.getElementById('restoreDeploymentNames')) {
-                    document.getElementById('restoreDeploymentNames').value = deploymentNames.join(',');
-                }
+                const shutdownInput = document.getElementById('shutdownDeploymentNames');
+                const restartInput = document.getElementById('restartDeploymentNames');
+                const restoreInput = document.getElementById('restoreDeploymentNames');
+                const measureInput = document.getElementById('measureDeploymentNames');
+                
+                const namesString = deploymentNames.join(',');
+                
+                if (shutdownInput) shutdownInput.value = namesString;
+                if (restartInput) restartInput.value = namesString;
+                if (restoreInput) restoreInput.value = namesString;
+                if (measureInput) measureInput.value = namesString;
                 
                 // Активируем кнопки
                 if (batchShutdownBtn) batchShutdownBtn.disabled = false;
                 if (batchRestartBtn) batchRestartBtn.disabled = false;
                 if (batchRestoreBtn) batchRestoreBtn.disabled = false;
+                if (batchMeasureBtn) batchMeasureBtn.disabled = false;
             } else {
                 // Деактивируем кнопки
                 if (batchShutdownBtn) batchShutdownBtn.disabled = true;
                 if (batchRestartBtn) batchRestartBtn.disabled = true;
                 if (batchRestoreBtn) batchRestoreBtn.disabled = true;
+                if (batchMeasureBtn) batchMeasureBtn.disabled = true;
+                
+                // Очищаем скрытые поля
+                const shutdownInput = document.getElementById('shutdownDeploymentNames');
+                const restartInput = document.getElementById('restartDeploymentNames');
+                const restoreInput = document.getElementById('restoreDeploymentNames');
+                const measureInput = document.getElementById('measureDeploymentNames');
+                
+                if (shutdownInput) shutdownInput.value = '';
+                if (restartInput) restartInput.value = '';
+                if (restoreInput) restoreInput.value = '';
+                if (measureInput) measureInput.value = '';
             }
             
             // Обновляем состояние "Выбрать все"
-            const allCheckboxes = document.querySelectorAll('.deployment-select');
             const selectAll = document.getElementById('selectAllDeployments');
-            if (selectAll && allCheckboxes.length > 0) {
-                selectAll.checked = selectedCount === allCheckboxes.length;
+            if (selectAll) {
+                // Считаем все видимые чекбоксы
+                const allVisibleCheckboxes = [];
+                const allRows = document.querySelectorAll('.deployment-row');
+                allRows.forEach(function(row) {
+                    if (row.style.display === 'none') return;
+                    const checkbox = row.querySelector('.deployment-select');
+                    if (checkbox) {
+                        allVisibleCheckboxes.push(checkbox);
+                    }
+                });
+                
+                if (allVisibleCheckboxes.length > 0) {
+                    selectAll.checked = selectedCount === allVisibleCheckboxes.length && selectedCount > 0;
+                } else {
+                    selectAll.checked = false;
+                }
             }
-        }
-
-        // Обработка отправки форм массовых операций
-        const batchShutdownForm = document.getElementById('batchShutdownForm');
-        const batchRestartForm = document.getElementById('batchRestartForm');
-        const batchRestoreForm = document.getElementById('batchRestoreForm');
-
-        if (batchShutdownForm) {
-            batchShutdownForm.addEventListener('submit', function(e) {
-                const deploymentNames = document.getElementById('shutdownDeploymentNames').value;
-                if (!deploymentNames) {
-                    e.preventDefault();
-                    alert('Не выбраны deployments для остановки');
-                    return false;
-                }
-                const names = deploymentNames.split(',');
-                const oldInput = document.getElementById('shutdownDeploymentNames');
-                oldInput.remove();
-                names.forEach(name => {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'deploymentNames';
-                    input.value = name.trim();
-                    this.appendChild(input);
-                });
-            });
-        }
-
-        if (batchRestartForm) {
-            batchRestartForm.addEventListener('submit', function(e) {
-                const deploymentNames = document.getElementById('restartDeploymentNames').value;
-                if (!deploymentNames) {
-                    e.preventDefault();
-                    alert('Не выбраны deployments для перезапуска');
-                    return false;
-                }
-                const names = deploymentNames.split(',');
-                const oldInput = document.getElementById('restartDeploymentNames');
-                oldInput.remove();
-                names.forEach(name => {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'deploymentNames';
-                    input.value = name.trim();
-                    this.appendChild(input);
-                });
-            });
-        }
-
-        if (batchRestoreForm) {
-            batchRestoreForm.addEventListener('submit', function(e) {
-                const deploymentNames = document.getElementById('restoreDeploymentNames').value;
-                if (!deploymentNames) {
-                    e.preventDefault();
-                    alert('Не выбраны deployments для восстановления');
-                    return false;
-                }
-                const names = deploymentNames.split(',');
-                const oldInput = document.getElementById('restoreDeploymentNames');
-                oldInput.remove();
-                names.forEach(name => {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'deploymentNames';
-                    input.value = name.trim();
-                    this.appendChild(input);
-                });
-            });
         }
 
         // Отслеживание измененных полей ввода
@@ -749,7 +747,7 @@
                 const deploymentNameElement = row.querySelector('.deployment-name');
                 if (deploymentNameElement) {
                     const deploymentName = deploymentNameElement.textContent.toLowerCase().trim();
-                    if (deploymentName.includes(searchTerm)) {
+                    if (searchTerm === '' || deploymentName.includes(searchTerm)) {
                         row.style.display = '';
                     } else {
                         row.style.display = 'none';
@@ -763,7 +761,147 @@
 
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', function() {
+            // Инициализируем состояние кнопок и счетчика
+            updateBatchActions();
             updateSaveAllButton();
+            
+            // Обработка отправки форм массовых операций
+            const batchShutdownForm = document.getElementById('batchShutdownForm');
+            const batchRestartForm = document.getElementById('batchRestartForm');
+            const batchRestoreForm = document.getElementById('batchRestoreForm');
+            const batchMeasureForm = document.getElementById('batchMeasureForm');
+
+            if (batchShutdownForm) {
+                batchShutdownForm.addEventListener('submit', function(e) {
+                    // Собираем выбранные чекбоксы прямо перед отправкой
+                    const allChecked = document.querySelectorAll('.deployment-select:checked');
+                    const deploymentNames = Array.from(allChecked).map(function(cb) {
+                        return cb.value;
+                    }).filter(function(name) {
+                        return name && name.trim().length > 0;
+                    });
+                    
+                    if (deploymentNames.length === 0) {
+                        e.preventDefault();
+                        alert('Не выбраны deployments для остановки');
+                        return false;
+                    }
+                    
+                    // Удаляем старое скрытое поле
+                    const oldInput = document.getElementById('shutdownDeploymentNames');
+                    if (oldInput) {
+                        oldInput.remove();
+                    }
+                    
+                    // Создаем новые скрытые поля для каждого deployment
+                    deploymentNames.forEach(function(name) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'deploymentNames';
+                        input.value = name.trim();
+                        this.appendChild(input);
+                    }, this);
+                });
+            }
+
+            if (batchRestartForm) {
+                batchRestartForm.addEventListener('submit', function(e) {
+                    // Собираем выбранные чекбоксы прямо перед отправкой
+                    const allChecked = document.querySelectorAll('.deployment-select:checked');
+                    const deploymentNames = Array.from(allChecked).map(function(cb) {
+                        return cb.value;
+                    }).filter(function(name) {
+                        return name && name.trim().length > 0;
+                    });
+                    
+                    if (deploymentNames.length === 0) {
+                        e.preventDefault();
+                        alert('Не выбраны deployments для перезапуска');
+                        return false;
+                    }
+                    
+                    // Удаляем старое скрытое поле
+                    const oldInput = document.getElementById('restartDeploymentNames');
+                    if (oldInput) {
+                        oldInput.remove();
+                    }
+                    
+                    // Создаем новые скрытые поля для каждого deployment
+                    deploymentNames.forEach(function(name) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'deploymentNames';
+                        input.value = name.trim();
+                        this.appendChild(input);
+                    }, this);
+                });
+            }
+
+            if (batchRestoreForm) {
+                batchRestoreForm.addEventListener('submit', function(e) {
+                    // Собираем выбранные чекбоксы прямо перед отправкой
+                    const allChecked = document.querySelectorAll('.deployment-select:checked');
+                    const deploymentNames = Array.from(allChecked).map(function(cb) {
+                        return cb.value;
+                    }).filter(function(name) {
+                        return name && name.trim().length > 0;
+                    });
+                    
+                    if (deploymentNames.length === 0) {
+                        e.preventDefault();
+                        alert('Не выбраны deployments для восстановления');
+                        return false;
+                    }
+                    
+                    // Удаляем старое скрытое поле
+                    const oldInput = document.getElementById('restoreDeploymentNames');
+                    if (oldInput) {
+                        oldInput.remove();
+                    }
+                    
+                    // Создаем новые скрытые поля для каждого deployment
+                    deploymentNames.forEach(function(name) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'deploymentNames';
+                        input.value = name.trim();
+                        this.appendChild(input);
+                    }, this);
+                });
+            }
+
+            if (batchMeasureForm) {
+                batchMeasureForm.addEventListener('submit', function(e) {
+                    // Собираем выбранные чекбоксы прямо перед отправкой
+                    const allChecked = document.querySelectorAll('.deployment-select:checked');
+                    const deploymentNames = Array.from(allChecked).map(function(cb) {
+                        return cb.value;
+                    }).filter(function(name) {
+                        return name && name.trim().length > 0;
+                    });
+                    
+                    if (deploymentNames.length === 0) {
+                        e.preventDefault();
+                        alert('Не выбраны deployments для замера времени');
+                        return false;
+                    }
+                    
+                    // Удаляем старое скрытое поле
+                    const oldInput = document.getElementById('measureDeploymentNames');
+                    if (oldInput) {
+                        oldInput.remove();
+                    }
+                    
+                    // Создаем новые скрытые поля для каждого deployment
+                    deploymentNames.forEach(function(name) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'deploymentNames';
+                        input.value = name.trim();
+                        this.appendChild(input);
+                    }, this);
+                });
+            }
             
             // Отслеживаем изменения при вводе
             document.querySelectorAll('.scale-input').forEach(input => {

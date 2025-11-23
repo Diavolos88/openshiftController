@@ -22,6 +22,7 @@ public class DeploymentInfo {
     private Integer availableReplicas;     // Доступные поды
     private Integer readyReplicas;         // Готовые поды
     private Integer originalReplicas;      // Изначальное количество (сохраненное)
+    private Long startupTimeSeconds;        // Время старта пода в секундах
     private Map<String, String> labels;
     private Instant creationTimestamp;
     private String status;
