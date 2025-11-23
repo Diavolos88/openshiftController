@@ -363,7 +363,7 @@ public class PodService {
                     .list();
             
             if (podList.getItems().isEmpty()) {
-                log.warn("Не найдено подов для deployment {}/{}", namespace, deploymentName);
+                log.error("Не найдено подов для deployment {}/{} - невозможно замерить время старта", namespace, deploymentName);
                 return null;
             }
             
@@ -381,12 +381,16 @@ public class PodService {
                     .size() > 0;
             
             if (!deleted) {
-                log.error("Не удалось удалить под {}/{}", namespace, podNameToDelete);
+                log.error("Не удалось удалить под {}/{} для deployment {}/{} - невозможно замерить время старта", 
+                        namespace, podNameToDelete, namespace, deploymentName);
                 return null;
             }
             
             log.info("Под {}/{} удален. Ожидаем создания нового пода для deployment {}/{}", 
                     namespace, podNameToDelete, namespace, deploymentName);
+            
+            // Запоминаем время удаления пода
+            java.time.Instant deletionTime = java.time.Instant.now();
             
             int maxWaitTime = 300; // Максимальное время ожидания 5 минут
             int checkInterval = 2; // Проверка каждые 2 секунды
@@ -408,11 +412,45 @@ public class PodService {
                         .withLabelSelector(labelSelector)
                         .list();
                 
-                // Ищем новый под (не тот, что удалили) и проверяем его готовность
+                // Ищем новый под (созданный ПОСЛЕ удаления старого) и проверяем его готовность
                 for (Pod pod : currentPods.getItems()) {
                     String currentPodName = pod.getMetadata() != null ? pod.getMetadata().getName() : null;
                     if (currentPodName != null && !currentPodName.equals(podNameToDelete)) {
-                        // Это новый под - проверяем его готовность
+                        // Проверяем, что под был создан ПОСЛЕ удаления старого
+                        String creationTimestampStr = pod.getMetadata().getCreationTimestamp();
+                        boolean isNewPod = false;
+                        
+                        if (creationTimestampStr != null && !creationTimestampStr.isEmpty()) {
+                            try {
+                                java.time.Instant podCreationTime = java.time.Instant.parse(creationTimestampStr);
+                                // Под должен быть создан после удаления (с небольшим запасом в 1 секунду для погрешности)
+                                if (podCreationTime.isBefore(deletionTime.minusSeconds(1))) {
+                                    log.debug("Пропускаем под {}/{} - создан до удаления старого пода (создан: {}, удаление: {})", 
+                                            namespace, currentPodName, podCreationTime, deletionTime);
+                                    continue;
+                                }
+                                isNewPod = true;
+                                log.debug("Найден потенциально новый под {}/{} (создан: {}, удаление: {})", 
+                                        namespace, currentPodName, podCreationTime, deletionTime);
+                            } catch (Exception e) {
+                                log.warn("Не удалось распарсить creationTimestamp для пода {}/{}: {}", 
+                                        namespace, currentPodName, creationTimestampStr, e);
+                                // Если не удалось распарсить, пропускаем этот под для безопасности
+                                log.debug("Пропускаем под {}/{} - не удалось определить время создания", 
+                                        namespace, currentPodName);
+                                continue;
+                            }
+                        } else {
+                            // Если нет creationTimestamp, пропускаем под для безопасности
+                            log.debug("Пропускаем под {}/{} - нет creationTimestamp", namespace, currentPodName);
+                            continue;
+                        }
+                        
+                        if (!isNewPod) {
+                            continue; // Пропускаем, если под не новый
+                        }
+                        
+                        // Это новый под, созданный после удаления - проверяем его готовность
                         if (pod.getStatus() != null && "Running".equals(pod.getStatus().getPhase())) {
                             // Проверяем, что все контейнеры готовы
                             if (pod.getStatus().getContainerStatuses() != null && 
@@ -445,7 +483,7 @@ public class PodService {
             }
             
             if (newPodName == null) {
-                log.warn("Превышено время ожидания готовности пода для deployment {}/{}", namespace, deploymentName);
+                log.error("Превышено время ожидания готовности пода для deployment {}/{}. Не удалось замерить время старта.", namespace, deploymentName);
                 return null;
             }
             
@@ -456,8 +494,23 @@ public class PodService {
                     .get();
             
             if (newPod == null || newPod.getStatus() == null || newPod.getStatus().getConditions() == null) {
-                log.error("Не удалось получить детали пода {}/{} или отсутствуют условия", namespace, newPodName);
+                log.error("Не удалось получить детали пода {}/{} или отсутствуют условия для deployment {}", namespace, newPodName, deploymentName);
+                if (newPod != null && newPod.getStatus() != null) {
+                    log.debug("Статус пода: {}, условия: {}", newPod.getStatus().getPhase(), 
+                            newPod.getStatus().getConditions() != null ? newPod.getStatus().getConditions().size() : 0);
+                }
                 return null;
+            }
+            
+            // Логируем все доступные условия для диагностики
+            log.info("Условия пода {}/{}: ", namespace, newPodName);
+            if (newPod.getStatus().getConditions() != null) {
+                newPod.getStatus().getConditions().forEach(condition -> {
+                    if (condition != null) {
+                        log.info("  - Тип: {}, Статус: {}, LastTransitionTime: {}", 
+                                condition.getType(), condition.getStatus(), condition.getLastTransitionTime());
+                    }
+                });
             }
             
             // Ищем Initialized и PodReadyToStartContainers условия
@@ -496,9 +549,17 @@ public class PodService {
                     .findFirst();
             
             if (!initializedTime.isPresent() || !podReadyToStartContainersTime.isPresent()) {
-                log.warn("Не найдены необходимые условия для замера времени старта пода {}/{}", namespace, newPodName);
-                log.debug("Initialized: {}, PodReadyToStartContainers: {}", 
+                log.error("Не найдены необходимые условия для замера времени старта пода {}/{} для deployment {}", 
+                        namespace, newPodName, deploymentName);
+                log.error("Initialized найден: {}, PodReadyToStartContainers найден: {}", 
                         initializedTime.isPresent(), podReadyToStartContainersTime.isPresent());
+                if (newPod.getStatus().getConditions() != null) {
+                    List<String> availableConditions = newPod.getStatus().getConditions().stream()
+                            .filter(c -> c != null && c.getType() != null)
+                            .map(c -> c.getType() + "=" + c.getStatus())
+                            .collect(java.util.stream.Collectors.toList());
+                    log.error("Доступные условия: {}", availableConditions);
+                }
                 return null;
             }
             
@@ -537,11 +598,18 @@ public class PodService {
         
         for (String deploymentName : deploymentNames) {
             try {
-                log.info("Замер времени старта для deployment {}/{}", namespace, deploymentName);
+                log.info("=== Начало замера времени старта для deployment {}/{} ===", namespace, deploymentName);
                 Long startupTime = measurePodStartupTime(connectionId, namespace, deploymentName);
-                results.put(deploymentName, startupTime);
+                if (startupTime != null) {
+                    log.info("✓ Успешно замерено время старта для deployment {}/{}: {} секунд", namespace, deploymentName, startupTime);
+                    results.put(deploymentName, startupTime);
+                } else {
+                    log.error("✗ Не удалось замерить время старта для deployment {}/{} (вернулось null)", namespace, deploymentName);
+                    results.put(deploymentName, null);
+                }
+                log.info("=== Завершен замер для deployment {}/{} ===\n", namespace, deploymentName);
             } catch (Exception e) {
-                log.error("Ошибка при замере времени старта для deployment {}/{}", namespace, deploymentName, e);
+                log.error("✗ Ошибка при замере времени старта для deployment {}/{}", namespace, deploymentName, e);
                 results.put(deploymentName, null);
             }
         }

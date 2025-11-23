@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
@@ -23,6 +24,7 @@ public class DeploymentInfo {
     private Integer readyReplicas;         // Готовые поды
     private Integer originalReplicas;      // Изначальное количество (сохраненное)
     private Long startupTimeSeconds;        // Время старта пода в секундах
+    private LocalDateTime startupTimeMeasuredAt; // Дата и время последнего замера времени старта
     private Map<String, String> labels;
     private Instant creationTimestamp;
     private String status;

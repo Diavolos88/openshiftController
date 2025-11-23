@@ -55,4 +55,19 @@ public class PodStartupTimeService {
         return repository.findByConnectionIdAndNamespaceAndDeploymentName(connectionId, namespace, deploymentName)
                 .map(PodStartupTime::getStartupTimeSeconds);
     }
+
+    /**
+     * Получить дату последнего замера для deployment
+     */
+    public Optional<java.time.LocalDateTime> getMeasuredAt(Long connectionId, String namespace, String deploymentName) {
+        return repository.findByConnectionIdAndNamespaceAndDeploymentName(connectionId, namespace, deploymentName)
+                .map(PodStartupTime::getMeasuredAt);
+    }
+
+    /**
+     * Получить полную информацию о времени старта (включая дату замера)
+     */
+    public Optional<PodStartupTime> getStartupTimeInfo(Long connectionId, String namespace, String deploymentName) {
+        return repository.findByConnectionIdAndNamespaceAndDeploymentName(connectionId, namespace, deploymentName);
+    }
 }

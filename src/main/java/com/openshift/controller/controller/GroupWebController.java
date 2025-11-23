@@ -8,6 +8,7 @@ import com.openshift.controller.service.ConnectionService;
 import com.openshift.controller.service.DeploymentService;
 import com.openshift.controller.service.PodService;
 import com.openshift.controller.service.StateService;
+import com.openshift.controller.util.ConsoleUrlBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -71,13 +72,17 @@ public class GroupWebController {
                     
                     // Получаем дату последнего обновления стартовых значений
                     java.time.LocalDateTime lastUpdateDate = stateService.getLastUpdateDate(conn.getId(), namespace);
-                    connectionsWithDeployments.add(new ConnectionWithDeployments(conn, namespace, deployments, null, lastUpdateDate));
+                    // Строим URL консоли из API URL
+                    String consoleUrl = ConsoleUrlBuilder.buildConsoleUrl(conn.getMasterUrl(), namespace);
+                    connectionsWithDeployments.add(new ConnectionWithDeployments(conn, namespace, deployments, null, lastUpdateDate, consoleUrl));
                 } catch (Exception e) {
                     log.error("Ошибка при получении deployments для подключения {} (ID: {})", conn.getName(), conn.getId(), e);
-                    java.time.LocalDateTime lastUpdateDate = stateService.getLastUpdateDate(conn.getId(), 
-                            conn.getNamespace() != null ? conn.getNamespace() : "default");
-                    connectionsWithDeployments.add(new ConnectionWithDeployments(conn, conn.getNamespace(), List.of(), 
-                            "Ошибка: " + e.getMessage(), lastUpdateDate));
+                    String errorNamespace = conn.getNamespace() != null ? conn.getNamespace() : "default";
+                    java.time.LocalDateTime lastUpdateDate = stateService.getLastUpdateDate(conn.getId(), errorNamespace);
+                    // Строим URL консоли из API URL даже при ошибке
+                    String consoleUrl = ConsoleUrlBuilder.buildConsoleUrl(conn.getMasterUrl(), errorNamespace);
+                    connectionsWithDeployments.add(new ConnectionWithDeployments(conn, errorNamespace, List.of(), 
+                            "Ошибка: " + e.getMessage(), lastUpdateDate, consoleUrl));
                 }
             }
             
@@ -676,15 +681,17 @@ public class GroupWebController {
         private final List<DeploymentInfo> deployments;
         private final String error;
         private final java.time.LocalDateTime lastUpdateDate;
+        private final String consoleUrl;
 
         public ConnectionWithDeployments(OpenShiftConnection connection, String namespace, 
                                         List<DeploymentInfo> deployments, String error, 
-                                        java.time.LocalDateTime lastUpdateDate) {
+                                        java.time.LocalDateTime lastUpdateDate, String consoleUrl) {
             this.connection = connection;
             this.namespace = namespace;
             this.deployments = deployments;
             this.error = error;
             this.lastUpdateDate = lastUpdateDate;
+            this.consoleUrl = consoleUrl;
         }
 
         public OpenShiftConnection getConnection() {
@@ -705,6 +712,10 @@ public class GroupWebController {
 
         public java.time.LocalDateTime getLastUpdateDate() {
             return lastUpdateDate;
+        }
+
+        public String getConsoleUrl() {
+            return consoleUrl;
         }
     }
 }

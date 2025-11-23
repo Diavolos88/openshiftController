@@ -8,6 +8,7 @@ import com.openshift.controller.service.ConnectionService;
 import com.openshift.controller.service.DeploymentService;
 import com.openshift.controller.service.PodService;
 import com.openshift.controller.service.StateService;
+import com.openshift.controller.util.ConsoleUrlBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -160,6 +161,9 @@ public class DeploymentWebController {
             // Получаем информацию о подключении
             connectionService.getConnectionById(connectionId).ifPresent(conn -> {
                 model.addAttribute("connection", conn);
+                // Строим URL консоли из API URL
+                String consoleUrl = ConsoleUrlBuilder.buildConsoleUrl(conn.getMasterUrl(), namespace);
+                model.addAttribute("consoleUrl", consoleUrl);
             });
             
             List<DeploymentInfo> deployments = deploymentService.getAllDeployments(connectionId, namespace);

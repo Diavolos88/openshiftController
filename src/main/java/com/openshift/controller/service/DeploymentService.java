@@ -119,9 +119,12 @@ public class DeploymentService {
                     deployment.setOriginalReplicas(deployment.getCurrentReplicas());
                 }
                 
-                // Добавляем время старта пода
-                podStartupTimeService.getStartupTime(connectionId, deployment.getNamespace(), deployment.getName())
-                        .ifPresent(deployment::setStartupTimeSeconds);
+                // Добавляем время старта пода и дату последнего замера
+                podStartupTimeService.getStartupTimeInfo(connectionId, deployment.getNamespace(), deployment.getName())
+                        .ifPresent(startupTimeInfo -> {
+                            deployment.setStartupTimeSeconds(startupTimeInfo.getStartupTimeSeconds());
+                            deployment.setStartupTimeMeasuredAt(startupTimeInfo.getMeasuredAt());
+                        });
             });
             
             return deployments;
